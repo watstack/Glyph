@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+# Nothing's SDK licence forbids redistribution; it is downloaded at build time (see README).
+app/libs/*.aar

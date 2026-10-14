@@ -15,18 +15,23 @@ import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
 
-/** One-screen setup: location permission, °C/°F, and a shortcut to Nothing's Glyph Toys manager. */
+/** One-screen setup: a preview of the icon, location permission, °C/°F, and a shortcut to Nothing's Glyph Toys manager. */
 class MainActivity : Activity() {
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var repo: WeatherRepository
     private lateinit var status: TextView
+    private lateinit var preview: MatrixPreviewView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repo = WeatherRepository(this)
 
         val pad = (24 * resources.displayMetrics.density).toInt()
-        status = TextView(this).apply { textSize = 18f }
+        preview = MatrixPreviewView(this)
+        status = TextView(this).apply {
+            textSize = 18f
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
         val unit = Switch(this).apply {
             text = getString(R.string.use_fahrenheit)
             isChecked = repo.fahrenheit
@@ -45,7 +50,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(pad, pad * 2, pad, pad)
-            listOf(status, unit, activate, help).forEach { addView(it) }
+            listOf(preview, status, unit, activate, help).forEach { addView(it) }
         })
     }
 
@@ -105,7 +110,14 @@ class MainActivity : Activity() {
 
     private fun showTemperature() {
         val t = repo.cachedTemperature() ?: return
-        status.text = getString(R.string.current_temp, DigitFont.label(t), if (repo.fahrenheit) "F" else "C")
+        val unit = if (repo.fahrenheit) "F" else "C"
+        val condition = repo.cachedCondition()
+        preview.condition = condition
+        status.text = if (condition == null) {
+            getString(R.string.current_temp, DigitFont.label(t), unit)
+        } else {
+            getString(R.string.current_weather, DigitFont.label(t), unit, condition.label)
+        }
     }
 
     private fun openToysManager() {

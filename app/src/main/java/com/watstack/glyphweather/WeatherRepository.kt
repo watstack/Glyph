@@ -12,7 +12,7 @@ import java.net.URL
 import java.util.Locale
 
 /**
- * Fetches the current temperature from Open-Meteo (free, no API key) and caches it.
+ * Fetches the current temperature and weather code from Open-Meteo (free, no API key) and caches it.
  * Blocking calls: run [refresh] off the main thread.
  */
 class WeatherRepository(context: Context) {
@@ -29,8 +29,13 @@ class WeatherRepository(context: Context) {
     fun cachedTemperature(): Double? =
         if (prefs.contains(KEY_TEMP)) prefs.getFloat(KEY_TEMP, 0f).toDouble() else null
 
+    /** The icon for the cached weather, or null if we don't have one yet. */
+    fun cachedCondition(): WeatherIcons.Condition? =
+        if (prefs.contains(KEY_CODE)) WeatherIcons.condition(prefs.getInt(KEY_CODE, -1), prefs.getBoolean(KEY_IS_DAY, true)) else null
+
+    // A cache from before weather codes were fetched is stale too.
     fun isStale(now: Long = System.currentTimeMillis()): Boolean =
-        now - prefs.getLong(KEY_FETCHED_AT, 0L) > MAX_AGE_MS
+        !prefs.contains(KEY_CODE) || now - prefs.getLong(KEY_FETCHED_AT, 0L) > MAX_AGE_MS
 
     fun hasLocation(): Boolean = prefs.contains(KEY_LAT)
 
@@ -42,7 +47,7 @@ class WeatherRepository(context: Context) {
             .apply()
     }
 
-    /** Updates the cached temperature. Returns true on success. */
+    /** Updates the cached temperature and weather. Returns true on success. */
     fun refresh(): Boolean {
         lastKnownLocation()?.let(::saveLocation)
         if (!hasLocation()) return false
@@ -52,7 +57,7 @@ class WeatherRepository(context: Context) {
         val url = URL(
             String.format(
                 Locale.US,
-                "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=temperature_2m&temperature_unit=%s",
+                "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=temperature_2m,weather_code,is_day&temperature_unit=%s",
                 lat, lon, unit
             )
         )
@@ -65,9 +70,11 @@ class WeatherRepository(context: Context) {
             } finally {
                 conn.disconnect()
             }
-            val temp = JSONObject(body).getJSONObject("current").getDouble("temperature_2m")
+            val current = JSONObject(body).getJSONObject("current")
             prefs.edit()
-                .putFloat(KEY_TEMP, temp.toFloat())
+                .putFloat(KEY_TEMP, current.getDouble("temperature_2m").toFloat())
+                .putInt(KEY_CODE, current.getInt("weather_code"))
+                .putBoolean(KEY_IS_DAY, current.optInt("is_day", 1) == 1)
                 .putLong(KEY_FETCHED_AT, System.currentTimeMillis())
                 .apply()
             true
@@ -99,6 +106,8 @@ class WeatherRepository(context: Context) {
         private const val TAG = "GlyphWeather"
         private const val MAX_AGE_MS = 30 * 60 * 1000L
         private const val KEY_TEMP = "temp"
+        private const val KEY_CODE = "weather_code"
+        private const val KEY_IS_DAY = "is_day"
         private const val KEY_FETCHED_AT = "fetched_at"
         private const val KEY_LAT = "lat"
         private const val KEY_LON = "lon"

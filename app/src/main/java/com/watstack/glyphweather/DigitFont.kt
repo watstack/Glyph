@@ -27,7 +27,25 @@ object DigitFont {
         )
     )
 
-    /** 3×5: fallback for three characters, e.g. "-12" or "103". */
+    /** 4×7 with a one-LED degree dot: two characters with their degree, e.g. "18°" or "-5°". */
+    private val medium = Font(
+        7, mapOf(
+            '0' to listOf(".##.", "#..#", "#..#", "#..#", "#..#", "#..#", ".##."),
+            '1' to listOf("..#.", ".##.", "..#.", "..#.", "..#.", "..#.", ".###"),
+            '2' to listOf(".##.", "#..#", "...#", "..#.", ".#..", "#...", "####"),
+            '3' to listOf("###.", "...#", "...#", ".##.", "...#", "...#", "###."),
+            '4' to listOf("..#.", ".##.", "#.#.", "#.#.", "####", "..#.", "..#."),
+            '5' to listOf("####", "#...", "###.", "...#", "...#", "#..#", ".##."),
+            '6' to listOf(".##.", "#...", "#...", "###.", "#..#", "#..#", ".##."),
+            '7' to listOf("####", "...#", "...#", "..#.", ".#..", ".#..", ".#.."),
+            '8' to listOf(".##.", "#..#", "#..#", ".##.", "#..#", "#..#", ".##."),
+            '9' to listOf(".##.", "#..#", "#..#", ".###", "...#", "...#", ".##."),
+            '-' to listOf("....", "....", "....", "####", "....", "....", "...."),
+            '°' to listOf("#", ".", ".", ".", ".", ".", "."),
+        )
+    )
+
+    /** 3×5: fallback for three characters, e.g. "-12°" or "103°". */
     private val small = Font(
         5, mapOf(
             '0' to listOf("###", "#.#", "#.#", "#.#", "###"),
@@ -41,7 +59,7 @@ object DigitFont {
             '8' to listOf("###", "#.#", "###", "#.#", "###"),
             '9' to listOf("###", "#.#", "###", "..#", "###"),
             '-' to listOf("...", "...", "###", "...", "..."),
-            '°' to listOf("##", "##", "..", "..", ".."),
+            '°' to listOf("#", ".", ".", ".", "."),
         )
     )
 
@@ -61,12 +79,13 @@ object DigitFont {
 
     /**
      * Renders [text] centred on a [size]×[size] grid. Returns row-major pixels, true = lit.
-     * Picks the first layout whose lit pixels all land on real LEDs:
-     * large with "°", large without, small with "°", small without.
+     * Picks the first layout whose lit pixels all land on real LEDs, preferring to keep the degree sign:
+     * large, medium then small with "°", then the same without.
      */
     fun render(text: String, size: Int): BooleanArray {
         val withDegree = if (text == "--") text else "$text°"
-        val candidates = listOf(withDegree to large, text to large, withDegree to small, text to small)
+        val fonts = listOf(large, medium, small)
+        val candidates = fonts.map { withDegree to it } + fonts.map { text to it }
         for ((t, font) in candidates) {
             val px = draw(t, font, size) ?: continue
             if (px.indices.all { !px[it] || hasLed(it % size, it / size, size) }) return px

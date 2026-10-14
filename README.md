@@ -4,7 +4,7 @@ Shows the current temperature and an animated weather icon on the **Nothing Phon
 
 The weather icon animates on the matrix for 5 seconds, then the temperature shows for 55 seconds, on repeat.
 
-- One or two characters (`18`, `-5`, `7°`) use a 5×7 font; three (`-12`, `103`) use a 3×5 font. Everything stays inside the round 137-LED matrix.
+- Every temperature keeps its degree sign: one digit (`7°`) uses a 5×7 font, two characters (`18°`, `-5°`) a 4×7 font with a one-LED degree dot, three (`-12°`, `103°`) a 3×5 font with the dot. Everything stays inside the round 137-LED matrix.
 - Icons, picked from Open-Meteo's WMO weather code: clear (sun by day, moon and stars at night), partly cloudy (cloud with sun or moon), cloudy, fog, drizzle, rain, heavy rain, sleet, snow and thunderstorm (cloud with lightning bolt). Clouds behind rain, snow and lightning are dimmed so what's falling stands out.
 - The app shows the same icon animating, with the temperature and condition.
 - Weather comes from [Open-Meteo](https://open-meteo.com) (free, no API key) and refreshes every 30 minutes.

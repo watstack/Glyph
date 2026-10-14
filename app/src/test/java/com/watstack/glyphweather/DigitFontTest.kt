@@ -48,9 +48,15 @@ class DigitFontTest {
     }
 
     @Test
-    fun twoDigitsUseLargeFont() {
-        assertEquals(7, litRows(DigitFont.render("18", size)).size)
-        val cols = litCols(DigitFont.render("-5", size))
-        assertEquals(11, cols.last() - cols.first() + 1)
+    fun twoCharactersUseTallFontWithDegreeDot() {
+        for (t in listOf("18", "-5")) {
+            val px = DigitFont.render(t, size)
+            assertEquals("$t is 7 rows tall", 7, litRows(px).size)
+            // The degree dot: lit top-right pixel with a gap column before it.
+            val right = litCols(px).last()
+            val top = litRows(px).first()
+            assertTrue("$t has a degree dot", px[top * size + right])
+            assertTrue("$t dot stands alone", (0 until size).none { r -> px[r * size + right - 1] })
+        }
     }
 }

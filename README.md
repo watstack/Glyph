@@ -2,7 +2,7 @@
 
 Shows the current temperature and an animated weather icon on the **Nothing Phone (4a) Pro** Glyph Matrix (also works on Phone (3)).
 
-The matrix shows the temperature for 30 seconds, then the weather icon animates for 3 seconds, on repeat.
+The weather icon animates on the matrix for 5 seconds, then the temperature shows for 55 seconds, on repeat.
 
 - One or two characters (`18`, `-5`, `7°`) use a 5×7 font; three (`-12`, `103`) use a 3×5 font. Everything stays inside the round 137-LED matrix.
 - Icons, picked from Open-Meteo's WMO weather code: clear (sun by day, moon and stars at night), partly cloudy (cloud with sun or moon), cloudy, fog, drizzle, rain, heavy rain, sleet, snow and thunderstorm (cloud with lightning bolt). Clouds behind rain, snow and lightning are dimmed so what's falling stands out.

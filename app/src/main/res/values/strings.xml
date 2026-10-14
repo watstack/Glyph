@@ -4,7 +4,7 @@
     <string name="toy_summary">Current temperature and weather for your location</string>
     <string name="use_fahrenheit">Show °F</string>
     <string name="activate_toy">Activate Glyph Toy</string>
-    <string name="setup_help">1. Tap Activate Glyph Toy and add \"Weather\".\n2. Go to Settings › Glyph Interface › Flip to Glyph › Always-on Glyph Toy and choose Weather.\n3. Put the phone face down.\n\nThe matrix shows the temperature for 30 seconds, then an animated weather icon for 3 seconds. The weather refreshes every 30 minutes. Opening this app also updates your location.</string>
+    <string name="setup_help">1. Tap Activate Glyph Toy and add \"Weather\".\n2. Go to Settings › Glyph Interface › Flip to Glyph › Always-on Glyph Toy and choose Weather.\n3. Put the phone face down.\n\nThe matrix plays an animated weather icon for 5 seconds, then shows the temperature for 55 seconds. The weather refreshes every 30 minutes. Opening this app also updates your location.</string>
     <string name="loading">Fetching weather…</string>
     <string name="need_location">Location permission is needed to know where you are.</string>
     <string name="no_weather">Couldn\'t get the weather yet. Check your connection and location.</string>

@@ -22,8 +22,8 @@ import com.nothing.ketchum.GlyphToy
 import java.util.concurrent.Executors
 
 /**
- * Glyph Toy that shows the current temperature on the Glyph Matrix for 30 seconds, then the animated weather icon
- * for 3 seconds, on repeat. On Phone (4a) Pro toys only run as Always-on toys; the system sends EVENT_AOD once a minute.
+ * Glyph Toy that plays the animated weather icon on the Glyph Matrix for 5 seconds, then shows the current temperature
+ * for 55 seconds, on repeat. On Phone (4a) Pro toys only run as Always-on toys; the system sends EVENT_AOD once a minute.
  */
 class WeatherToyService : Service() {
     private val main = Handler(Looper.getMainLooper())
@@ -93,24 +93,29 @@ class WeatherToyService : Service() {
     private fun refreshIfStale() {
         if (!repo.isStale() || refreshing) return
         refreshing = true
+        val hadIcon = repo.cachedCondition() != null
         io.execute {
             repo.refresh()
             main.post {
                 refreshing = false
-                if (frame < 0) draw() // show the new temperature now; the icon picks it up next time round
+                when {
+                    !hadIcon && repo.cachedCondition() != null -> restartCycle() // first weather: lead with the icon
+                    frame < 0 -> draw() // show the new temperature now; the icon picks it up next time round
+                }
             }
         }
     }
 
+    /** Starts again from the icon (or the temperature, if there's no weather code yet). */
     private fun restartCycle() {
         main.removeCallbacks(step)
-        frame = -1
+        frame = if (repo.cachedCondition() == null) -1 else 0
         show()
     }
 
-    /** Temperature → icon frames 0‥11 → temperature. Without a weather code there's no icon, so stay on the temperature. */
+    /** Icon frames 0 until [ICON_FRAMES] → temperature → icon. Without a weather code there's no icon, so stay on the temperature. */
     private fun advance() {
-        frame = if (frame + 1 >= WeatherIcons.FRAMES || repo.cachedCondition() == null) -1 else frame + 1
+        frame = if (frame + 1 >= ICON_FRAMES || repo.cachedCondition() == null) -1 else frame + 1
         show()
     }
 
@@ -125,7 +130,7 @@ class WeatherToyService : Service() {
         val size = Common.getDeviceMatrixLength().takeIf { it > 0 } ?: 13
         val condition = repo.cachedCondition()
         val pixels = if (frame >= 0 && condition != null) {
-            WeatherIcons.frame(condition, frame, size)
+            WeatherIcons.frame(condition, frame % WeatherIcons.FRAMES, size) // the 3 s loop plays 1⅔ times
         } else {
             val lit = DigitFont.render(DigitFont.label(repo.cachedTemperature()), size)
             IntArray(lit.size) { if (lit[it]) WeatherIcons.FULL else 0 }
@@ -149,7 +154,8 @@ class WeatherToyService : Service() {
     }
 
     companion object {
-        private const val TEMPERATURE_MS = 30_000L
+        private const val ICON_FRAMES = (5_000L / WeatherIcons.FRAME_MS).toInt()
+        private const val TEMPERATURE_MS = 55_000L
         private const val STALL_GRACE_MS = 5_000L
     }
 }

@@ -113,9 +113,9 @@ class WeatherToyService : Service() {
         show()
     }
 
-    /** Icon frames 0 until [ICON_FRAMES] → temperature → icon. Without a weather code there's no icon, so stay on the temperature. */
+    /** Icon frames 0 until [WeatherIcons.ICON_FRAMES] (intro, then loop) → temperature → icon. Without a weather code there's no icon, so stay on the temperature. */
     private fun advance() {
-        frame = if (frame + 1 >= ICON_FRAMES || repo.cachedCondition() == null) -1 else frame + 1
+        frame = if (frame + 1 >= WeatherIcons.ICON_FRAMES || repo.cachedCondition() == null) -1 else frame + 1
         show()
     }
 
@@ -130,7 +130,7 @@ class WeatherToyService : Service() {
         val size = Common.getDeviceMatrixLength().takeIf { it > 0 } ?: 13
         val condition = repo.cachedCondition()
         val pixels = if (frame >= 0 && condition != null) {
-            WeatherIcons.frame(condition, frame % WeatherIcons.FRAMES, size) // the 3 s loop plays 1⅔ times
+            WeatherIcons.frame(condition, frame, size)
         } else {
             val lit = DigitFont.render(DigitFont.label(repo.cachedTemperature()), size)
             IntArray(lit.size) { if (lit[it]) WeatherIcons.FULL else 0 }
@@ -154,7 +154,6 @@ class WeatherToyService : Service() {
     }
 
     companion object {
-        private const val ICON_FRAMES = (5_000L / WeatherIcons.FRAME_MS).toInt()
         private const val TEMPERATURE_MS = 55_000L
         private const val STALL_GRACE_MS = 5_000L
     }

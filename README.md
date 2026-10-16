@@ -6,6 +6,7 @@ The weather icon animates on the matrix for 5 seconds, then the temperature show
 
 - Every temperature keeps its degree sign: one digit (`7°`) uses a 5×7 font, two characters (`18°`, `-5°`) a 4×7 font with a one-LED degree dot, three (`-12°`, `103°`) a 3×5 font with the dot. Everything stays inside the round 137-LED matrix.
 - Icons, picked from Open-Meteo's WMO weather code: clear (sun by day, moon and stars at night), partly cloudy (cloud with sun or moon), cloudy, fog, drizzle, rain, heavy rain, sleet, snow and thunderstorm (cloud with lightning bolt). Clouds behind rain, snow and lightning are dimmed so what's falling stands out.
+- In the style of Nothing's Moon Phase toy, icons are shaded across many brightness levels, whatever isn't lit right now (the moon's dark side, sun rays, the bolt, rain paths) keeps a faint glow, and each icon opens with a 1 s sweep before looping at 8 fps.
 - The app shows the same icon animating, with the temperature and condition.
 - Weather comes from [Open-Meteo](https://open-meteo.com) (free, no API key) and refreshes every 30 minutes.
 - Location is the phone's *approximate* (city-level) location, rounded to ~1 km before it is sent to Open-Meteo. Opening the app refreshes it.

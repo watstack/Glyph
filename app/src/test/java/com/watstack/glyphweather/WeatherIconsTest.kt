@@ -1,6 +1,7 @@
 package com.watstack.glyphweather
 
 import com.watstack.glyphweather.WeatherIcons.Condition
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,8 +23,8 @@ class WeatherIconsTest {
     }
 
     @Test
-    fun animationLastsThreeSeconds() {
-        assertEquals(3_000L, WeatherIcons.FRAMES * WeatherIcons.FRAME_MS)
+    fun animationLastsFiveSeconds() {
+        assertEquals(5_000L, WeatherIcons.ICON_FRAMES * WeatherIcons.FRAME_MS)
     }
 
     @Test
@@ -47,13 +48,33 @@ class WeatherIconsTest {
     @Test
     fun everyIconAnimatesOnRealLeds() {
         for (c in Condition.values()) {
-            val frames = (0 until WeatherIcons.FRAMES).map { WeatherIcons.frame(c, it, size) }
-            println("$c:\n${ascii(frames[0])}\n")
+            val frames = (0 until WeatherIcons.ICON_FRAMES).map { WeatherIcons.frame(c, it, size) }
+            println("$c:\n${ascii(frames[WeatherIcons.INTRO_FRAMES])}\n")
             for ((f, px) in frames.withIndex()) {
                 assertTrue("$c frame $f lights something", px.any { it > 0 })
                 for (i in px.indices) if (px[i] > 0) assertTrue("$c pixel $i off-matrix", DigitFont.hasLed(i % size, i / size, size))
             }
-            assertTrue("$c moves", frames.any { !it.contentEquals(frames[0]) })
+            val loop = frames.drop(WeatherIcons.INTRO_FRAMES)
+            assertTrue("$c moves", loop.any { !it.contentEquals(loop[0]) })
+        }
+    }
+
+    @Test
+    fun iconsAreShadedWithAFaintGlow() {
+        for (c in Condition.values()) {
+            val levels = WeatherIcons.frame(c, WeatherIcons.INTRO_FRAMES, size).filter { it > 0 }.toSet()
+            assertTrue("$c uses several brightness levels: $levels", levels.size >= 4)
+            assertTrue("$c has a faint glow: $levels", levels.any { it <= 50 })
+        }
+    }
+
+    @Test
+    fun loopIsSeamlessAndIntroLeadsIntoIt() {
+        val first = WeatherIcons.INTRO_FRAMES
+        for (c in Condition.values()) {
+            assertArrayEquals("$c loops", WeatherIcons.frame(c, first, size), WeatherIcons.frame(c, first + WeatherIcons.LOOP_FRAMES, size))
+            assertArrayEquals("$c intro ends on the loop's first frame", WeatherIcons.frame(c, first, size), WeatherIcons.frame(c, first - 1, size))
+            assertTrue("$c intro starts dim", WeatherIcons.frame(c, 0, size).sum() < WeatherIcons.frame(c, first, size).sum())
         }
     }
 

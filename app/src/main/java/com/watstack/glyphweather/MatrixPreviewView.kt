@@ -6,7 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.view.View
 
-/** An on-screen copy of the 13×13 Glyph Matrix playing the current weather icon on a loop. */
+/** An on-screen copy of the 13×13 Glyph Matrix playing the current weather icon: its intro, then the loop. */
 class MatrixPreviewView(context: Context) : View(context) {
     private val size = 13
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -14,13 +14,14 @@ class MatrixPreviewView(context: Context) : View(context) {
 
     var condition: WeatherIcons.Condition? = null
         set(value) {
+            if (value != field) frame = 0 // replay the intro for a new icon
             field = value
             invalidate()
         }
 
     private val tick = object : Runnable {
         override fun run() {
-            frame = (frame + 1) % WeatherIcons.FRAMES
+            frame = if (frame + 1 < WeatherIcons.ICON_FRAMES) frame + 1 else WeatherIcons.INTRO_FRAMES
             invalidate()
             postDelayed(this, WeatherIcons.FRAME_MS)
         }

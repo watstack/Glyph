@@ -42,8 +42,27 @@ object DigitFont {
             '9' to listOf("###", "#.#", "###", "..#", "###"),
             '-' to listOf("...", "...", "###", "...", "..."),
             '°' to listOf("##", "##", "..", "..", ".."),
+            'U' to listOf("#.#", "#.#", "#.#", "#.#", "###"),
+            'V' to listOf("#.#", "#.#", "#.#", "#.#", ".#."),
         )
     )
+
+    /**
+     * The UV screen: small "UV" on top and the rounded index underneath ("--" when unknown), centred as one block
+     * with a blank row between. On the 13×13 matrix that's rows 1–5 and 7–11, which fits values up to 99.
+     */
+    fun renderUv(uv: Double?, size: Int): BooleanArray {
+        val out = BooleanArray(size * size)
+        val block = small.height * 2 + 1
+        if (block > size) return out
+        val top = (size - block) / 2
+        val label = if (uv == null || uv.isNaN()) "--" else Math.round(uv.coerceAtLeast(0.0)).toString()
+        for ((text, y) in listOf("UV" to top, label to top + small.height + 1)) {
+            val line = draw(text, small, size, y) ?: continue
+            for (i in line.indices) if (line[i]) out[i] = true
+        }
+        return out
+    }
 
     /** Text to show for a temperature, or "--" when unknown. */
     fun label(temperature: Double?): String =
@@ -74,13 +93,12 @@ object DigitFont {
         return draw(text, small, size) ?: BooleanArray(size * size)
     }
 
-    /** Draws [text] centred, or returns null if it doesn't fit in the square at all. */
-    private fun draw(text: String, font: Font, size: Int): BooleanArray? {
+    /** Draws [text] centred (vertically too, unless [top] is given), or returns null if it doesn't fit in the square. */
+    private fun draw(text: String, font: Font, size: Int, top: Int = (size - font.height) / 2): BooleanArray? {
         val w = width(text, font)
-        if (w > size || font.height > size) return null
+        if (w > size || top < 0 || top + font.height > size) return null
         val out = BooleanArray(size * size)
         var x = (size - w) / 2
-        val top = (size - font.height) / 2
         for (ch in text) {
             val g = font.glyphs[ch] ?: continue
             for (row in g.indices) for (col in g[row].indices) {

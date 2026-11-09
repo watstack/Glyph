@@ -66,4 +66,12 @@ class WeatherIconsTest {
         assertEquals(rows.first(), n - 1 - rows.last())
         assertEquals(cols.first(), n - 1 - cols.last())
     }
+
+    @Test
+    fun onlyDaySunsAreFollowedByUv() {
+        val sunny = Condition.values().filter { WeatherIcons.showsSun(it) }.toSet()
+        assertEquals(setOf(Condition.CLEAR_DAY, Condition.PARTLY_CLOUDY_DAY), sunny)
+        assertTrue(!WeatherIcons.showsSun(null))
+        assertEquals(3_000L, WeatherIcons.UV_MS)
+    }
 }

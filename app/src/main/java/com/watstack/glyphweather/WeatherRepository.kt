@@ -12,7 +12,7 @@ import java.net.URL
 import java.util.Locale
 
 /**
- * Fetches the current temperature and weather code from Open-Meteo (free, no API key) and caches it.
+ * Fetches the current temperature, weather code and UV index from Open-Meteo (free, no API key) and caches it.
  * Blocking calls: run [refresh] off the main thread.
  */
 class WeatherRepository(context: Context) {
@@ -33,9 +33,17 @@ class WeatherRepository(context: Context) {
     fun cachedCondition(): WeatherIcons.Condition? =
         if (prefs.contains(KEY_CODE)) WeatherIcons.condition(prefs.getInt(KEY_CODE, -1), prefs.getBoolean(KEY_IS_DAY, true)) else null
 
-    // A cache from before weather codes were fetched is stale too.
+    /** The cached UV index, or null if we don't have one yet. */
+    fun cachedUv(): Double? =
+        if (prefs.contains(KEY_UV)) prefs.getFloat(KEY_UV, 0f).toDouble() else null
+
+    // A cache from an older version (before weather codes or UV were fetched) is stale too.
     fun isStale(now: Long = System.currentTimeMillis()): Boolean =
-        !prefs.contains(KEY_CODE) || now - prefs.getLong(KEY_FETCHED_AT, 0L) > MAX_AGE_MS
+        prefs.getInt(KEY_FORMAT, 0) < FORMAT || isOlderThan(MAX_AGE_MS, now)
+
+    /** Whether the cache was fetched more than [ms] ago (or never). */
+    fun isOlderThan(ms: Long, now: Long = System.currentTimeMillis()): Boolean =
+        now - prefs.getLong(KEY_FETCHED_AT, 0L) > ms
 
     fun hasLocation(): Boolean = prefs.contains(KEY_LAT)
 
@@ -57,7 +65,7 @@ class WeatherRepository(context: Context) {
         val url = URL(
             String.format(
                 Locale.US,
-                "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=temperature_2m,weather_code,is_day&temperature_unit=%s",
+                "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=temperature_2m,weather_code,is_day,uv_index&temperature_unit=%s",
                 lat, lon, unit
             )
         )
@@ -71,12 +79,16 @@ class WeatherRepository(context: Context) {
                 conn.disconnect()
             }
             val current = JSONObject(body).getJSONObject("current")
-            prefs.edit()
+            val edit = prefs.edit()
                 .putFloat(KEY_TEMP, current.getDouble("temperature_2m").toFloat())
                 .putInt(KEY_CODE, current.getInt("weather_code"))
                 .putBoolean(KEY_IS_DAY, current.optInt("is_day", 1) == 1)
                 .putLong(KEY_FETCHED_AT, System.currentTimeMillis())
-                .apply()
+                .putInt(KEY_FORMAT, FORMAT)
+            // uv_index can be null in the response; keep the last value rather than store a wrong 0.
+            val uv = current.optDouble("uv_index", Double.NaN)
+            if (!uv.isNaN()) edit.putFloat(KEY_UV, uv.toFloat())
+            edit.apply()
             true
         } catch (e: Exception) {
             Log.w(TAG, "Weather fetch failed", e)
@@ -108,6 +120,10 @@ class WeatherRepository(context: Context) {
         private const val KEY_TEMP = "temp"
         private const val KEY_CODE = "weather_code"
         private const val KEY_IS_DAY = "is_day"
+        private const val KEY_UV = "uv_index"
+        /** Bumped when a fetch starts storing new fields, so older caches refetch once. 2 = with UV. */
+        private const val KEY_FORMAT = "format"
+        private const val FORMAT = 2
         private const val KEY_FETCHED_AT = "fetched_at"
         private const val KEY_LAT = "lat"
         private const val KEY_LON = "lon"

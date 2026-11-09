@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # to publish the release that Obtainium installs from
     steps:
       - uses: actions/checkout@v5
 
@@ -18,13 +20,62 @@ jobs:
       - name: Fetch Glyph Matrix SDK
         run: bash scripts/fetch-sdk.sh
 
+      # The same key every time, so a new APK installs over the old one and keeps its settings.
+      - name: Signing key
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.GLYPH_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.GLYPH_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::warning::No signing key secrets (GLYPH_KEYSTORE_B64, GLYPH_KEYSTORE_PASSWORD). This APK uses a throwaway key and won't install over an existing one; no release is published."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Pasting into the secrets page can add spaces or line breaks; base64 never contains them.
+          if ! printf %s "$KEYSTORE_B64" | tr -d ' \t\r\n' | base64 -d > "$RUNNER_TEMP/glyph.p12" 2>/dev/null; then
+            echo "::error::GLYPH_KEYSTORE_B64 isn't valid base64 ($(printf %s "$KEYSTORE_B64" | tr -d ' \t\r\n' | wc -c) characters after removing spaces; the key is 5704). Paste the whole file again."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$RUNNER_TEMP/glyph.p12" -storetype PKCS12 -storepass "$KEYSTORE_PASSWORD" -alias glyph > /dev/null 2>&1; then
+            echo "::error::The keystore decoded but didn't open with GLYPH_KEYSTORE_PASSWORD (or is incomplete). Check both secrets."
+            exit 1
+          fi
+          {
+            echo "GLYPH_KEYSTORE=$RUNNER_TEMP/glyph.p12"
+            echo "GLYPH_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
 
+      - name: Signing certificate
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk glyph-weather.apk
+          # minSdk 34 APKs carry only v2/v3 signatures, which keytool can't read; apksigner can.
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BT=$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs glyph-weather.apk | grep -E "DN:|SHA-256"
+
       - uses: actions/upload-artifact@v4
         with:
           name: glyph-weather-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: glyph-weather.apk
+
+      # Obtainium on the phone watches these releases and offers each one as an update.
+      - name: Publish release
+        if: github.ref == 'refs/heads/main' && steps.signing.outputs.signed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.3.${{ github.run_number }}
+          name: Glyph Weather 0.3.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: glyph-weather.apk
+          body: |
+            ${{ github.event.head_commit.message }}
+
+            Install or update with Obtainium (https://github.com/watstack/Glyph), or download glyph-weather.apk below.

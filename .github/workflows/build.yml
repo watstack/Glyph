@@ -48,7 +48,10 @@ jobs:
       - name: Signing certificate
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk glyph-weather.apk
-          keytool -printcert -jarfile glyph-weather.apk | grep -E "Owner|SHA256:"
+          # minSdk 34 APKs carry only v2/v3 signatures, which keytool can't read; apksigner can.
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          BT=$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs glyph-weather.apk | grep -E "DN:|SHA-256"
 
       - uses: actions/upload-artifact@v4
         with:

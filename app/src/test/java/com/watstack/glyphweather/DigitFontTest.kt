@@ -53,4 +53,22 @@ class DigitFontTest {
         val cols = litCols(DigitFont.render("-5", size))
         assertEquals(11, cols.last() - cols.first() + 1)
     }
+
+    @Test
+    fun uvScreenFitsTheRoundMatrix() {
+        val uvRows = (1..5).flatMap { r -> (0 until size).map { c -> r * size + c } }
+        val reference = DigitFont.renderUv(0.0, size)
+        for (uv in (0..15).map { it.toDouble() } + listOf<Double?>(null, 7.4)) {
+            val px = DigitFont.renderUv(uv, size)
+            println("UV $uv:\n${ascii(px)}\n")
+            for (i in px.indices) if (px[i]) assertTrue("UV $uv pixel $i off-matrix", DigitFont.hasLed(i % size, i / size, size))
+            val numberRows = if (uv == null) listOf(9) else (7..11).toList() // "--" is a single dash mid-way
+            assertEquals("UV $uv uses rows 1-5 and its number rows", (1..5).toList() + numberRows, litRows(px))
+            assertTrue("UV $uv keeps the same UV letters", uvRows.all { px[it] == reference[it] })
+            val cols = litCols(px)
+            assertTrue("UV $uv horizontally centred", kotlin.math.abs(cols.first() - (size - 1 - cols.last())) <= 1)
+        }
+        assertTrue("different values draw differently", !DigitFont.renderUv(3.0, size).contentEquals(DigitFont.renderUv(8.0, size)))
+        assertTrue("7.4 rounds to 7", DigitFont.renderUv(7.4, size).contentEquals(DigitFont.renderUv(7.0, size)))
+    }
 }

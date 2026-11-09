@@ -8,6 +8,12 @@ object WeatherIcons {
     /** One animation is [FRAMES] × [FRAME_MS] = 3 seconds, and loops seamlessly. */
     const val FRAMES = 12
     const val FRAME_MS = 250L
+    /** How long the UV screen shows after a sun animation: as long as one animation. */
+    const val UV_MS = FRAMES * FRAME_MS
+
+    /** Icons with the sun in them; these are followed by the UV screen. */
+    fun showsSun(condition: Condition?): Boolean =
+        condition == Condition.CLEAR_DAY || condition == Condition.PARTLY_CLOUDY_DAY
 
     const val FULL = 255
     private const val MID = 150

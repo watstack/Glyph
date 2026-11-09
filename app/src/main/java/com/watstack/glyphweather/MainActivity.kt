@@ -113,11 +113,13 @@ class MainActivity : Activity() {
         val unit = if (repo.fahrenheit) "F" else "C"
         val condition = repo.cachedCondition()
         preview.condition = condition
-        status.text = if (condition == null) {
+        val weather = if (condition == null) {
             getString(R.string.current_temp, DigitFont.label(t), unit)
         } else {
             getString(R.string.current_weather, DigitFont.label(t), unit, condition.label)
         }
+        val uv = repo.cachedUv()
+        status.text = if (uv == null) weather else "$weather · UV ${Math.round(uv)}"
     }
 
     private fun openToysManager() {

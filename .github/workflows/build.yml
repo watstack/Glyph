@@ -32,7 +32,15 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/glyph.p12"
+          # Pasting into the secrets page can add spaces or line breaks; base64 never contains them.
+          if ! printf %s "$KEYSTORE_B64" | tr -d ' \t\r\n' | base64 -d > "$RUNNER_TEMP/glyph.p12" 2>/dev/null; then
+            echo "::error::GLYPH_KEYSTORE_B64 isn't valid base64 ($(printf %s "$KEYSTORE_B64" | tr -d ' \t\r\n' | wc -c) characters after removing spaces; the key is 5704). Paste the whole file again."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$RUNNER_TEMP/glyph.p12" -storetype PKCS12 -storepass "$KEYSTORE_PASSWORD" -alias glyph > /dev/null 2>&1; then
+            echo "::error::The keystore decoded but didn't open with GLYPH_KEYSTORE_PASSWORD (or is incomplete). Check both secrets."
+            exit 1
+          fi
           {
             echo "GLYPH_KEYSTORE=$RUNNER_TEMP/glyph.p12"
             echo "GLYPH_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"

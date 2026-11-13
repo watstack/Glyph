@@ -25,6 +25,15 @@ Then the weather cycle starts again from the temperature. Each plane is shown on
 - Positions come from [adsb.lol](https://adsb.lol), falling back to [airplanes.live](https://airplanes.live) (both free community ADS-B feeds, no API key). Planes on the ground are ignored.
 - Routes come from [adsbdb.com](https://www.adsbdb.com) (free). Routes are matched on callsign, so occasionally one is out of date.
 - The app shows the last plane seen overhead, and has a **Show planes overhead** switch to turn this off.
+- The phone is kept awake (a partial wake lock, at most 30 s) while a plane plays, so it can't fall asleep after the crossing and skip the flight info. `adb logcat -s GlyphSky` logs each plane and each step of its sequence.
+
+### Simulate
+
+The app's preview plays exactly what the matrix shows (with the temperature screen cut to 3 seconds). Under **Simulate**:
+
+- **Weather picker**: choose any of the 12 icons (or Live weather) to watch it in the preview, with the temperature and UV screens.
+- **Find nearest plane**: looks up the nearest real plane in the air within 50 km and plays its full sequence: crossing, flight info, altitude.
+- **Show on Glyph**: plays the weather or plane you picked on the real matrix. Tap it, then put the phone face down within a minute (or it plays straight away if the toy is already showing). A simulated weather plays once, then live weather comes back.
 - The app's name changed from Glyph Weather to Glyph Sky, but it's the same app (same package and signing key), so it updates over the top. The toy is now called **Weather & Flights**; if it ever disappears from the Always-on list, pick it again.
 
 ## Install (once)

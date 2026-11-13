@@ -27,5 +27,9 @@
     <string name="pick_something_first">Pick a weather or find a plane first.</string>
     <string name="playing_on_glyph">Playing on the Glyph Matrix.</string>
     <string name="flip_to_show">Put the phone face down within a minute to see it on the Glyph Matrix.</string>
+    <string name="location_line">Location: %1$s</string>
+    <string name="location_unknown">Location: not known yet</string>
+    <string name="precise_off">Precise location is off: plane distances can be a few km out.</string>
+    <string name="turn_on_precise">Turn on precise location</string>
     <string name="toys_manager_missing">Glyph Toys manager not found. Open Settings › Glyph Interface instead.</string>
 </resources>

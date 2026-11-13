@@ -29,9 +29,11 @@ class FlightRepository(context: Context) {
 
     /** The nearest airborne plane within [radiusKm], with its route if known. */
     fun find(radiusKm: Double): Lookup {
+        // Ask the feed around the rounded point (widened to cover the rounding); measure from the precise one.
         val (lat, lon) = weather.savedLocation() ?: return Lookup(null, reached = false, hasLocation = false)
-        val nm = Math.ceil(radiusKm / KM_PER_NM).toInt().coerceIn(1, MAX_RADIUS_NM)
-        val path = String.format(Locale.US, "/v2/point/%.2f/%.2f/%d", lat, lon, nm)
+        val (sharedLat, sharedLon) = weather.sharedLocation() ?: return Lookup(null, reached = false, hasLocation = false)
+        val nm = Math.ceil((radiusKm + ROUNDING_KM) / KM_PER_NM).toInt().coerceIn(1, MAX_RADIUS_NM)
+        val path = String.format(Locale.US, "/v2/point/%.2f/%.2f/%d", sharedLat, sharedLon, nm)
         val body = get("https://api.adsb.lol$path") ?: get("https://api.airplanes.live$path")
             ?: return Lookup(null, reached = false)
         val flight = try {
@@ -85,6 +87,8 @@ class FlightRepository(context: Context) {
     companion object {
         private const val TAG = "GlyphSky"
         private const val KM_PER_NM = 1.852
+        /** Most a 2-decimal rounding can move a point: half of 0.01° on each axis, about 0.8 km. */
+        private const val ROUNDING_KM = 1.0
         /** The feeds' largest search radius. */
         private const val MAX_RADIUS_NM = 250
         private const val TIMEOUT_MS = 8_000

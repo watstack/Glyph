@@ -5,7 +5,11 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Address
+import android.location.Geocoder
 import android.location.LocationManager
+import android.net.Uri
+import android.provider.Settings
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -23,6 +27,7 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
@@ -38,6 +43,8 @@ class MainActivity : Activity() {
     private lateinit var flights: FlightRepository
     private lateinit var status: TextView
     private lateinit var lastPlane: TextView
+    private lateinit var locationLine: TextView
+    private lateinit var preciseButton: Button
     private lateinit var preview: MatrixPreviewView
     private lateinit var simStatus: TextView
     private lateinit var findPlane: Button
@@ -66,6 +73,16 @@ class MainActivity : Activity() {
         status = TextView(this).apply {
             textSize = 18f
             gravity = Gravity.CENTER_HORIZONTAL
+        }
+        locationLine = TextView(this).apply {
+            textSize = 14f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, pad / 6, 0, pad / 6)
+        }
+        preciseButton = Button(this).apply {
+            text = getString(R.string.turn_on_precise)
+            visibility = View.GONE
+            setOnClickListener { askForPrecise() }
         }
         val unit = Switch(this).apply {
             text = getString(R.string.use_fahrenheit)
@@ -132,7 +149,7 @@ class MainActivity : Activity() {
             setPadding(pad, pad, pad, pad)
             addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             listOf(
-                preview, status, unit, planes, lastPlane,
+                preview, status, locationLine, preciseButton, unit, planes, lastPlane,
                 simTitle, weatherPicker, findPlane, showOnGlyph, simStatus,
                 activate, help,
             ).forEach { addView(it) }
@@ -222,8 +239,10 @@ class MainActivity : Activity() {
         if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             updateLocationThenRefresh()
         } else {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
+            // Both together: Android then offers Precise or Approximate in one prompt.
+            requestPermissions(LOCATION_PERMISSIONS, REQ_LOCATION)
         }
+        showLocation()
         showTemperature()
         showLastPlane()
         replay()
@@ -231,7 +250,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_LOCATION && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == REQ_LOCATION && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
             updateLocationThenRefresh()
         } else if (requestCode == REQ_LOCATION) {
             status.text = getString(R.string.need_location)
@@ -243,7 +262,53 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    /** While the app is open (foreground) Android will give us a fresh approximate fix. */
+    /** Asks again for precise location; once Android stops asking, opens the app's settings page instead. */
+    private fun askForPrecise() {
+        if (shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            requestPermissions(LOCATION_PERMISSIONS, REQ_LOCATION)
+        } else {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+        }
+    }
+
+    /** "Location: Brunswick · ±12 m · 2 minutes ago", plus a warning and a button when only approximate is allowed. */
+    private fun showLocation() {
+        val precise = repo.preciseAllowed()
+        val hasPermission = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        preciseButton.visibility = if (hasPermission && !precise) View.VISIBLE else View.GONE
+        val fix = repo.savedFix()
+        if (fix == null) {
+            locationLine.text = getString(R.string.location_unknown)
+            return
+        }
+        val parts = mutableListOf<String>()
+        fix.accuracyM?.let { parts += if (it < 1000) "±${Math.round(it)} m" else String.format(Locale.US, "±%.1f km", it / 1000) }
+        if (fix.timeMs > 0) {
+            parts += DateUtils.getRelativeTimeSpanString(fix.timeMs, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+        }
+        val warning = if (hasPermission && !precise) "\n" + getString(R.string.precise_off) else ""
+        fun render(place: String) {
+            locationLine.text = getString(R.string.location_line, (listOf(place) + parts).joinToString(" · ")) + warning
+        }
+        render(String.format(Locale.US, "%.3f, %.3f", fix.lat, fix.lon))
+        // Suburb name from Android's own geocoder, when it has one.
+        if (!Geocoder.isPresent()) return
+        try {
+            Geocoder(this).getFromLocation(fix.lat, fix.lon, 1, object : Geocoder.GeocodeListener {
+                override fun onGeocode(addresses: MutableList<Address>) {
+                    val a = addresses.firstOrNull() ?: return
+                    val place = a.subLocality ?: a.locality ?: a.subAdminArea ?: return
+                    runOnUiThread { if (repo.savedFix() == fix) render(place) }
+                }
+
+                override fun onError(errorMessage: String?) {}
+            })
+        } catch (e: Exception) {
+            // No geocoder backend on this phone: the coordinates stay.
+        }
+    }
+
+    /** While the app is open (foreground) Android will give us a fresh fix: precise if allowed, else approximate. */
     private fun updateLocationThenRefresh() {
         val lm = getSystemService(LocationManager::class.java)
         val provider = listOf(LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER)
@@ -255,6 +320,7 @@ class MainActivity : Activity() {
         try {
             lm.getCurrentLocation(provider, null, mainExecutor) { location ->
                 location?.let(repo::saveLocation)
+                showLocation()
                 refresh()
             }
         } catch (e: SecurityException) {
@@ -267,6 +333,7 @@ class MainActivity : Activity() {
         io.execute {
             val ok = repo.refresh()
             runOnUiThread {
+                showLocation()
                 showTemperature()
                 if (!ok && repo.cachedTemperature() == null) status.text = getString(R.string.no_weather)
             }
@@ -308,6 +375,8 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_LOCATION = 1
+        private val LOCATION_PERMISSIONS =
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         /** The preview's temperature screen; the matrix holds it for 30 s, which is too long to watch. */
         private const val PREVIEW_TEMPERATURE_MS = 3_000L
         private const val SIMULATE_RADIUS_KM = 50.0

@@ -42,10 +42,73 @@ object DigitFont {
             '9' to listOf("###", "#.#", "###", "..#", "###"),
             '-' to listOf("...", "...", "###", "...", "..."),
             '°' to listOf("##", "##", "..", "..", ".."),
+            // Letters and symbols for the scrolling flight ticker ("QF401 MEL>SYD B738").
+            'A' to listOf(".#.", "#.#", "###", "#.#", "#.#"),
+            'B' to listOf("##.", "#.#", "##.", "#.#", "##."),
+            'C' to listOf(".##", "#..", "#..", "#..", ".##"),
+            'D' to listOf("##.", "#.#", "#.#", "#.#", "##."),
+            'E' to listOf("###", "#..", "##.", "#..", "###"),
+            'F' to listOf("###", "#..", "##.", "#..", "#.."),
+            'G' to listOf(".##", "#..", "#.#", "#.#", ".##"),
+            'H' to listOf("#.#", "#.#", "###", "#.#", "#.#"),
+            'I' to listOf("###", ".#.", ".#.", ".#.", "###"),
+            'J' to listOf("..#", "..#", "..#", "#.#", ".#."),
+            'K' to listOf("#.#", "#.#", "##.", "#.#", "#.#"),
+            'L' to listOf("#..", "#..", "#..", "#..", "###"),
+            'M' to listOf("#.#", "###", "###", "#.#", "#.#"),
+            'N' to listOf("###", "#.#", "#.#", "#.#", "#.#"),
+            'O' to listOf(".#.", "#.#", "#.#", "#.#", ".#."), // rounder than 0, so the two differ
+            'P' to listOf("##.", "#.#", "##.", "#..", "#.."),
+            'Q' to listOf(".#.", "#.#", "#.#", "##.", ".##"),
+            'R' to listOf("##.", "#.#", "##.", "#.#", "#.#"),
+            'S' to listOf(".##", "#..", ".#.", "..#", "##."),
+            'T' to listOf("###", ".#.", ".#.", ".#.", ".#."),
             'U' to listOf("#.#", "#.#", "#.#", "#.#", "###"),
             'V' to listOf("#.#", "#.#", "#.#", "#.#", ".#."),
+            'W' to listOf("#.#", "#.#", "###", "###", "#.#"),
+            'X' to listOf("#.#", "#.#", ".#.", "#.#", "#.#"),
+            'Y' to listOf("#.#", "#.#", ".#.", ".#.", ".#."),
+            'Z' to listOf("###", "..#", ".#.", "#..", "###"),
+            '>' to listOf("#..", ".#.", "..#", ".#.", "#.."),
+            ' ' to listOf("..", "..", "..", "..", ".."),
         )
     )
+
+    /** Columns one scroll of [text] takes: in from the right edge until its last column has left on the left. */
+    fun scrollSteps(text: String, size: Int): Int = width(clean(text), small) + size
+
+    /**
+     * Step [step] (0 until [scrollSteps]) of [text] scrolling right to left through the middle rows in the 3×5 font.
+     * On the 13×13 matrix those are rows 4–8, which have LEDs all the way across.
+     */
+    fun renderScroll(text: String, step: Int, size: Int): BooleanArray {
+        val out = BooleanArray(size * size)
+        val top = (size - small.height) / 2
+        var x = size - step
+        for (ch in clean(text)) {
+            val g = small.glyphs[ch] ?: continue
+            for (row in g.indices) for (col in g[row].indices) {
+                val sx = x + col
+                if (g[row][col] == '#' && sx in 0 until size && hasLed(sx, top + row, size)) out[(top + row) * size + sx] = true
+            }
+            x += g[0].length + GAP
+        }
+        return out
+    }
+
+    /** Altitude for the matrix: thousands of feet with K ("35K" for 35,000 ft), hundreds below 1,000 ft. */
+    fun altitudeLabel(feet: Int?): String = when {
+        feet == null -> "--"
+        feet >= 1000 -> "${(feet + 500) / 1000}K"
+        else -> "${(feet.coerceAtLeast(0) / 100) * 100}"
+    }
+
+    /** The altitude screen: [altitudeLabel] centred in the 3×5 font. */
+    fun renderAltitude(feet: Int?, size: Int): BooleanArray =
+        draw(altitudeLabel(feet), small, size) ?: BooleanArray(size * size)
+
+    /** Upper-cases [text] and drops characters the 3×5 font can't draw. */
+    private fun clean(text: String): String = text.uppercase().filter { it in small.glyphs }
 
     /**
      * The UV screen: small "UV" on top and the rounded index underneath ("--" when unknown), centred as one block

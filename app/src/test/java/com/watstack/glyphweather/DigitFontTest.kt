@@ -71,4 +71,42 @@ class DigitFontTest {
         assertTrue("different values draw differently", !DigitFont.renderUv(3.0, size).contentEquals(DigitFont.renderUv(8.0, size)))
         assertTrue("7.4 rounds to 7", DigitFont.renderUv(7.4, size).contentEquals(DigitFont.renderUv(7.0, size)))
     }
+
+    @Test
+    fun scrollingTickerStaysOnTheMiddleRows() {
+        val text = "QF401 MEL>SYD B738"
+        val steps = DigitFont.scrollSteps(text, size)
+        assertEquals(16 * 3 + 2 * 2 + 17 + size, steps) // 16 3-wide glyphs, 2 2-wide spaces, 17 gaps
+        assertTrue("starts blank", DigitFont.renderScroll(text, 0, size).none { it })
+        assertTrue("ends blank", DigitFont.renderScroll(text, steps, size).none { it })
+        for (s in 0 until steps) {
+            val px = DigitFont.renderScroll(text, s, size)
+            for (r in litRows(px)) assertTrue("step $s row $r", r in 4..8)
+        }
+        println(ascii(DigitFont.renderScroll(text, size, size)))
+    }
+
+    @Test
+    fun everyTickerCharacterDraws() {
+        for (ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789->") {
+            assertTrue("$ch draws", DigitFont.renderScroll("$ch", size - 2, size).any { it })
+        }
+        assertTrue("lowercase is upper-cased", DigitFont.renderScroll("qf", 6, size).contentEquals(DigitFont.renderScroll("QF", 6, size)))
+        assertTrue("O and 0 differ", !DigitFont.renderScroll("O", 8, size).contentEquals(DigitFont.renderScroll("0", 8, size)))
+    }
+
+    @Test
+    fun altitudeScreen() {
+        assertEquals("35K", DigitFont.altitudeLabel(35_000))
+        assertEquals("12K", DigitFont.altitudeLabel(12_025))
+        assertEquals("2K", DigitFont.altitudeLabel(1_500))
+        assertEquals("800", DigitFont.altitudeLabel(875))
+        assertEquals("--", DigitFont.altitudeLabel(null))
+        for (ft in listOf(null, 500, 3_000, 35_000, 45_000)) {
+            val px = DigitFont.renderAltitude(ft, size)
+            println("$ft ft:\n${ascii(px)}\n")
+            assertTrue("$ft lights something", px.any { it })
+            for (i in px.indices) if (px[i]) assertTrue("$ft pixel $i off-matrix", DigitFont.hasLed(i % size, i / size, size))
+        }
+    }
 }

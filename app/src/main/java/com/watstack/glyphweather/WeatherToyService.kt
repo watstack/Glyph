@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import com.nothing.ketchum.Common
@@ -26,8 +27,8 @@ import com.nothing.ketchum.GlyphToy
 import java.util.concurrent.Executors
 
 /**
- * Glyph Toy for the Glyph Matrix. It cycles: temperature for 30 seconds, then the animated weather icon for 3 seconds,
- * then, when the icon has the sun in it, the UV index for 3 seconds; on repeat.
+ * Glyph Toy for the Glyph Matrix. What it shows, step by step, is [ToySequence]: temperature for 30 seconds, the
+ * animated weather icon for 3 seconds, then the UV index after a sun; on repeat.
  *
  * Flipping the phone face down starts the cycle at the icon and refetches the weather (with UV) if it's more than
  * 10 minutes old. The SDK has no flip event, so a flip is caught two ways: the system binding the toy when Flip to
@@ -35,7 +36,10 @@ import java.util.concurrent.Executors
  *
  * When a plane flies within 5 km, it interrupts: the plane crosses the matrix on its real heading, its flight number,
  * route and type scroll past, then its altitude shows, and the weather cycle starts again. Flights are polled every
- * 15 seconds while the phone is face down, and each plane is shown once per pass.
+ * 15 seconds while the phone is face down, and each plane is shown once per pass. The CPU is kept awake for the
+ * plane sequence; without that the phone sleeps after the crossing and the rest never shows.
+ *
+ * The app can send a simulated weather or plane through [Simulation]; it plays now if face down, or on the next flip.
  *
  * On Phone (4a) Pro toys only run as Always-on toys; the system sends EVENT_AOD once a minute.
  */
@@ -44,16 +48,14 @@ class WeatherToyService : Service() {
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var repo: WeatherRepository
     private lateinit var flights: FlightRepository
+    private lateinit var seq: ToySequence
     private var gm: GlyphMatrixManager? = null
     private var refreshing = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
-    /** [TEMPERATURE] while the temperature is showing, 0 until FRAMES for an icon frame, or [UV] for the UV screen. */
-    private var frame = TEMPERATURE
     private var lastStepAt = 0L
     private val step = Runnable { advance() }
 
-    /** The plane being shown, and how far through its sequence we are; null while showing the weather. */
-    private var plane: PlaneShow? = null
     private var polling = false
     private val poll = object : Runnable {
         override fun run() {
@@ -87,6 +89,15 @@ class WeatherToyService : Service() {
         override fun onServiceConnected(name: ComponentName) {
             gm?.register(if (Common.is23112()) Glyph.DEVICE_23112 else Glyph.DEVICE_25111p)
             startFlipSensor()
+            // Play a simulation now unless the phone is known to be face up (the matrix can't be seen then).
+            Simulation.listener = { request ->
+                if (faceDown == false) {
+                    false
+                } else {
+                    play(request)
+                    true
+                }
+            }
             kickOff()
             main.removeCallbacks(poll)
             main.postDelayed(poll, FLIGHT_POLL_MS)
@@ -110,6 +121,10 @@ class WeatherToyService : Service() {
         super.onCreate()
         repo = WeatherRepository(this)
         flights = FlightRepository(this)
+        seq = ToySequence({ WeatherState(repo.cachedTemperature(), repo.cachedCondition(), repo.cachedUv()) })
+        wakeLock = getSystemService(PowerManager::class.java)
+            ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "GlyphSky:plane")
+            ?.apply { setReferenceCounted(false) }
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -118,9 +133,11 @@ class WeatherToyService : Service() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        Simulation.listener = null
         main.removeCallbacks(step)
         main.removeCallbacks(poll)
-        plane = null
+        seq.restart(atIcon = false)
+        releaseWake()
         stopFlipSensor()
         gm?.turnOff()
         gm?.unInit()
@@ -130,6 +147,7 @@ class WeatherToyService : Service() {
 
     override fun onDestroy() {
         stopFlipSensor()
+        releaseWake()
         io.shutdownNow()
         super.onDestroy()
     }
@@ -149,43 +167,77 @@ class WeatherToyService : Service() {
 
     /** The once-a-minute system event. If the phone slept and our timer stalled, start the cycle again. */
     private fun onTick() {
-        if (SystemClock.elapsedRealtime() - lastStepAt > TEMPERATURE_MS + STALL_GRACE_MS) restartCycle()
+        val stalledFor = SystemClock.elapsedRealtime() - lastStepAt
+        if (stalledFor > ToySequence.TEMPERATURE_MS + STALL_GRACE_MS) {
+            if (seq.isPlane) Log.w(TAG, "Plane sequence stalled in ${seq.phase} for ${stalledFor / 1000} s")
+            restartCycle()
+        }
         refreshIfOlderThan(null)
         pollFlights()
     }
 
-    /** The phone was just flipped face down: play the icon now and make sure the weather and UV are fresh. */
+    /** The phone was just flipped face down: play a waiting simulation, or the icon now; make sure weather is fresh. */
     private fun kickOff() {
-        main.removeCallbacks(step)
-        plane = null
-        frame = if (repo.cachedCondition() != null) 0 else TEMPERATURE
-        show()
+        val pending = Simulation.take(SystemClock.elapsedRealtime())
+        if (pending != null) {
+            play(pending)
+        } else {
+            main.removeCallbacks(step)
+            seq.restart(atIcon = true)
+            releaseWake()
+            show()
+        }
         refreshIfOlderThan(FLIP_REFRESH_MS)
         pollFlights()
     }
 
+    private fun play(request: Simulation.Request) {
+        Log.i(TAG, "Simulating $request")
+        when (request) {
+            is Simulation.Plane -> startPlane(request.flight)
+            is Simulation.Weather -> {
+                main.removeCallbacks(step)
+                releaseWake()
+                seq.simulateWeather(request.state, repeat = false)
+                show()
+            }
+        }
+    }
+
     /** Looks for a plane overhead in the background; a new one interrupts whatever is showing. */
     private fun pollFlights() {
-        if (polling || plane != null || faceDown == false || !flights.enabled) return
+        if (polling || seq.isPlane || faceDown == false || !flights.enabled) return
         polling = true
         io.execute {
             val found = flights.nearest()
             main.post {
                 polling = false
-                if (found != null && gm != null && plane == null) startPlane(found)
+                if (found != null && gm != null && !seq.isPlane && isNew(found)) startPlane(found)
             }
         }
     }
 
-    private fun startPlane(f: Flight) {
+    /** Whether [f] hasn't been shown in the last [PLANE_REPEAT_MS]; marks it shown. */
+    private fun isNew(f: Flight): Boolean {
         val now = SystemClock.elapsedRealtime()
         val last = shownAt[f.hex]
-        if (last != null && now - last < PLANE_REPEAT_MS) return
+        if (last != null && now - last < PLANE_REPEAT_MS) return false
         shownAt.entries.removeAll { now - it.value > PLANE_REPEAT_MS }
         shownAt[f.hex] = now
+        return true
+    }
+
+    private fun startPlane(f: Flight) {
+        Log.i(TAG, "Plane: ${f.ticker()} at ${f.altitudeFt} ft, ${"%.1f".format(f.distanceKm)} km")
         main.removeCallbacks(step)
-        plane = PlaneShow(f, DigitFont.scrollSteps(f.ticker(), matrixSize()))
+        // Keep the CPU awake until the sequence ends, or the timer freezes once the phone sleeps.
+        wakeLock?.acquire(ToySequence.PLANE_MAX_MS)
+        seq.startPlane(f, matrixSize())
         show()
+    }
+
+    private fun releaseWake() {
+        wakeLock?.takeIf { it.isHeld }?.release()
     }
 
     /** Refetches in the background if the cache is older than [maxAgeMs], or simply stale when null. */
@@ -198,69 +250,41 @@ class WeatherToyService : Service() {
             main.post {
                 refreshing = false
                 // Redraw a number screen now; the icon picks up a new condition on its next frame.
-                if (frame == TEMPERATURE || frame == UV) draw()
+                if (seq.phase == ToySequence.Phase.TEMPERATURE || seq.phase == ToySequence.Phase.UV) draw()
             }
         }
     }
 
     private fun restartCycle() {
         main.removeCallbacks(step)
-        plane = null
-        frame = TEMPERATURE
+        seq.stopSimulation()
+        seq.restart(atIcon = false)
+        releaseWake()
         show()
     }
 
-    /**
-     * Temperature → icon frames 0‥11 → UV (only after a sun, and only if we have a UV reading) → temperature.
-     * Without a weather code there's no icon, so stay on the temperature.
-     */
     private fun advance() {
-        plane?.let { p ->
-            p.step++
-            if (p.step < p.total) {
-                show()
-                return
-            }
-            plane = null
-            frame = TEMPERATURE
-            show()
-            return
-        }
-        val condition = repo.cachedCondition()
-        frame = when {
-            condition == null -> TEMPERATURE
-            frame == TEMPERATURE -> 0
-            frame in 0 until WeatherIcons.FRAMES - 1 -> frame + 1
-            frame == WeatherIcons.FRAMES - 1 && WeatherIcons.showsSun(condition) && repo.cachedUv() != null -> UV
-            else -> TEMPERATURE
-        }
+        val before = seq.phase
+        seq.advance()
+        val after = seq.phase
+        if (before != after && (before.isPlane() || after.isPlane())) Log.i(TAG, "Plane sequence: $before → $after")
+        if (before.isPlane() && !seq.isPlane) releaseWake()
         show()
     }
+
+    private fun ToySequence.Phase.isPlane() =
+        this == ToySequence.Phase.CROSSING || this == ToySequence.Phase.SCROLL || this == ToySequence.Phase.ALTITUDE
 
     private fun show() {
         draw()
         lastStepAt = SystemClock.elapsedRealtime()
-        val p = plane
-        val delay = if (p != null) p.delay() else when (frame) {
-            TEMPERATURE -> TEMPERATURE_MS
-            UV -> WeatherIcons.UV_MS
-            else -> WeatherIcons.FRAME_MS
-        }
-        main.postDelayed(step, delay)
+        main.postDelayed(step, seq.delayMs())
     }
 
     private fun draw() {
         val manager = gm ?: return
         val size = matrixSize()
-        val condition = repo.cachedCondition()
-        val p = plane
-        val pixels = when {
-            p != null -> p.pixels(size)
-            frame == UV -> lit(DigitFont.renderUv(repo.cachedUv(), size))
-            frame >= 0 && condition != null -> WeatherIcons.frame(condition, frame, size)
-            else -> lit(DigitFont.render(DigitFont.label(repo.cachedTemperature()), size))
-        }
-
+        val pixels = seq.pixels(size)
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         for (i in pixels.indices) {
             val v = pixels[i]
@@ -274,37 +298,14 @@ class WeatherToyService : Service() {
         try {
             manager.setMatrixFrame(matrixFrame.render())
         } catch (e: GlyphException) {
-            Log.w("GlyphWeather", "Failed to draw on Glyph Matrix", e)
+            Log.w(TAG, "Failed to draw on Glyph Matrix", e)
         }
     }
 
     private fun matrixSize() = Common.getDeviceMatrixLength().takeIf { it > 0 } ?: 13
 
-    private fun lit(px: BooleanArray) = IntArray(px.size) { if (px[it]) WeatherIcons.FULL else 0 }
-
-    /** A plane's sequence: crossing animation, then the scrolling ticker, then the altitude screen. */
-    private inner class PlaneShow(val flight: Flight, private val scrollSteps: Int) {
-        private val crossing = FlightIcons.FRAMES * FlightIcons.CROSSINGS
-        val total = crossing + scrollSteps + 1
-        var step = 0
-
-        fun delay(): Long = when {
-            step < crossing -> FlightIcons.FRAME_MS
-            step < crossing + scrollSteps -> SCROLL_MS
-            else -> ALTITUDE_MS
-        }
-
-        fun pixels(size: Int): IntArray = when {
-            step < crossing -> FlightIcons.frame(flight.trackDeg, step % FlightIcons.FRAMES, size)
-            step < crossing + scrollSteps -> lit(DigitFont.renderScroll(flight.ticker(), step - crossing, size))
-            else -> lit(DigitFont.renderAltitude(flight.altitudeFt, size))
-        }
-    }
-
     companion object {
-        private const val TEMPERATURE = -1
-        private const val UV = WeatherIcons.FRAMES
-        private const val TEMPERATURE_MS = 30_000L
+        private const val TAG = "GlyphSky"
         private const val STALL_GRACE_MS = 5_000L
         private const val FLIP_REFRESH_MS = 10 * 60 * 1000L
         private const val FACE_DOWN_Z = -8f
@@ -312,7 +313,5 @@ class WeatherToyService : Service() {
         private const val FLIGHT_POLL_MS = 15_000L
         /** A plane already shown isn't shown again for this long (it's still the same pass overhead). */
         private const val PLANE_REPEAT_MS = 10 * 60 * 1000L
-        private const val SCROLL_MS = 80L
-        private const val ALTITUDE_MS = 3_000L
     }
 }

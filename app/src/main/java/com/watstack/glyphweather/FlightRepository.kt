@@ -21,19 +21,31 @@ class FlightRepository(context: Context) {
         get() = prefs.getBoolean(KEY_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_ENABLED, value).apply()
 
-    /** The nearest plane within [Flights.RADIUS_KM], with its route if known, or null. */
-    fun nearest(): Flight? {
-        val (lat, lon) = weather.savedLocation() ?: return null
-        val path = String.format(Locale.US, "/v2/point/%.2f/%.2f/%d", lat, lon, RADIUS_NM)
-        val body = get("https://api.adsb.lol$path") ?: get("https://api.airplanes.live$path") ?: return null
+    /** The nearest plane within [Flights.RADIUS_KM], with its route if known, or null. Remembered for the app screen. */
+    fun nearest(): Flight? = find(Flights.RADIUS_KM).flight?.also(::remember)
+
+    /** Result of a lookup: the nearest plane (or null), and whether the feed could be reached at all. */
+    data class Lookup(val flight: Flight?, val reached: Boolean, val hasLocation: Boolean = true)
+
+    /** The nearest airborne plane within [radiusKm], with its route if known. */
+    fun find(radiusKm: Double): Lookup {
+        val (lat, lon) = weather.savedLocation() ?: return Lookup(null, reached = false, hasLocation = false)
+        val nm = Math.ceil(radiusKm / KM_PER_NM).toInt().coerceIn(1, MAX_RADIUS_NM)
+        val path = String.format(Locale.US, "/v2/point/%.2f/%.2f/%d", lat, lon, nm)
+        val body = get("https://api.adsb.lol$path") ?: get("https://api.airplanes.live$path")
+            ?: return Lookup(null, reached = false)
         val flight = try {
-            Flights.nearest(body, lat, lon)
+            Flights.nearest(body, lat, lon, radiusKm)
         } catch (e: Exception) {
             Log.w(TAG, "Unreadable flight data", e)
-            null
-        } ?: return null
-        return withRoute(flight).also(::remember)
+            return Lookup(null, reached = false)
+        }
+        return Lookup(flight?.let(::withRoute), reached = true)
     }
+
+    /** One line for the app: "QF401 MEL>SYD B738 · 35K ft · 2.4 km". */
+    fun describe(f: Flight): String =
+        String.format(Locale.US, "%s · %s ft · %.1f km", f.ticker(), DigitFont.altitudeLabel(f.altitudeFt), f.distanceKm)
 
     /** The last plane shown, for the app screen: e.g. "QF401 MEL>SYD B738 · 35K ft · 2.4 km", and when. */
     fun lastSeen(): Pair<String, Long>? {
@@ -52,8 +64,7 @@ class FlightRepository(context: Context) {
     }
 
     private fun remember(f: Flight) {
-        val text = String.format(Locale.US, "%s · %s ft · %.1f km", f.ticker(), DigitFont.altitudeLabel(f.altitudeFt), f.distanceKm)
-        prefs.edit().putString(KEY_LAST, text).putLong(KEY_LAST_AT, System.currentTimeMillis()).apply()
+        prefs.edit().putString(KEY_LAST, describe(f)).putLong(KEY_LAST_AT, System.currentTimeMillis()).apply()
     }
 
     private fun get(url: String): String? = try {
@@ -73,8 +84,9 @@ class FlightRepository(context: Context) {
 
     companion object {
         private const val TAG = "GlyphSky"
-        /** Search radius for the feed, in nautical miles; just over 5 km so nothing near the edge is missed. */
-        private const val RADIUS_NM = 3
+        private const val KM_PER_NM = 1.852
+        /** The feeds' largest search radius. */
+        private const val MAX_RADIUS_NM = 250
         private const val TIMEOUT_MS = 8_000
         private const val KEY_ENABLED = "enabled"
         private const val KEY_LAST = "last"

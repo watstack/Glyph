@@ -10,7 +10,7 @@ Flipping the phone face down starts the cycle at the icon straight away, and fet
 - Icons, picked from Open-Meteo's WMO weather code: clear (sun by day, moon and stars at night), partly cloudy (cloud with sun or moon), cloudy, fog, drizzle, rain, heavy rain, sleet, snow and thunderstorm (cloud with lightning bolt). Clouds behind rain, snow and lightning are dimmed so what's falling stands out.
 - The app shows the same icon animating, with the temperature, condition and UV index.
 - Weather comes from [Open-Meteo](https://open-meteo.com) (free, no API key) and refreshes every 30 minutes.
-- Location is the phone's *approximate* (city-level) location, rounded to ~1 km before it is sent to Open-Meteo, adsb.lol or airplanes.live. Opening the app refreshes it.
+- Location: the app asks for *precise* location, so plane distances are measured from where you actually are. The precise fix stays on the phone; only a point rounded to ~1 km is sent to Open-Meteo, adsb.lol or airplanes.live. The app shows the current location (suburb from Android's geocoder, accuracy and age). If you only allow *approximate* location it still works, but Android blurs that by about 2 km, so planes near the 5 km edge can be missed; the app shows a **Turn on precise location** button. Opening the app refreshes the location; in the background only fixes under 30 minutes old and better than 3 km are used.
 
 ### Planes overhead
 

@@ -14,6 +14,9 @@ import java.util.Locale
 /**
  * Fetches the current temperature, weather code and UV index from Open-Meteo (free, no API key) and caches it.
  * Blocking calls: run [refresh] off the main thread.
+ *
+ * Also keeps the phone's location. The precise fix stays on the phone (plane distances use it); only a point
+ * rounded to ~1 km ([sharedLocation]) is sent to Open-Meteo and the flight feeds.
  */
 class WeatherRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -45,26 +48,60 @@ class WeatherRepository(context: Context) {
     fun isOlderThan(ms: Long, now: Long = System.currentTimeMillis()): Boolean =
         now - prefs.getLong(KEY_FETCHED_AT, 0L) > ms
 
-    fun hasLocation(): Boolean = prefs.contains(KEY_LAT)
+    fun hasLocation(): Boolean = prefs.contains(KEY_PRECISE_LAT) || prefs.contains(KEY_LAT)
 
-    /** The saved (rounded) latitude and longitude, or null before the first fix. */
-    fun savedLocation(): Pair<Double, Double>? =
-        if (hasLocation()) prefs.getFloat(KEY_LAT, 0f).toDouble() to prefs.getFloat(KEY_LON, 0f).toDouble() else null
+    /** Whether the user allowed precise location (not just approximate). */
+    fun preciseAllowed(): Boolean =
+        appContext.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    /** Remembers [location], rounded to ~1 km, for when a fresh fix isn't available. */
+    /** The saved fix, or null before the first one. Installs from before precise location have only a rounded point. */
+    fun savedFix(): Fix? = when {
+        prefs.contains(KEY_PRECISE_LAT) -> Fix(
+            Double.fromBits(prefs.getLong(KEY_PRECISE_LAT, 0L)),
+            Double.fromBits(prefs.getLong(KEY_PRECISE_LON, 0L)),
+            if (prefs.contains(KEY_ACCURACY)) prefs.getFloat(KEY_ACCURACY, 0f) else null,
+            prefs.getLong(KEY_FIX_AT, 0L),
+        )
+        prefs.contains(KEY_LAT) ->
+            Fix(prefs.getFloat(KEY_LAT, 0f).toDouble(), prefs.getFloat(KEY_LON, 0f).toDouble(), null, 0L)
+        else -> null
+    }
+
+    /** The saved latitude and longitude at full precision, for use on the phone only. */
+    fun savedLocation(): Pair<Double, Double>? = savedFix()?.let { it.lat to it.lon }
+
+    /** The saved location rounded to ~1 km: the only form sent to online services. */
+    fun sharedLocation(): Pair<Double, Double>? =
+        savedFix()?.let { LocationPick.round2(it.lat) to LocationPick.round2(it.lon) }
+
+    /** Remembers [location] for when a fresh fix isn't available. */
     fun saveLocation(location: Location) {
-        prefs.edit()
-            .putFloat(KEY_LAT, round2(location.latitude).toFloat())
-            .putFloat(KEY_LON, round2(location.longitude).toFloat())
-            .apply()
+        saveFix(Fix(location.latitude, location.longitude, if (location.hasAccuracy()) location.accuracy else null, location.time))
+    }
+
+    private fun saveFix(fix: Fix) {
+        val edit = prefs.edit()
+            .putLong(KEY_PRECISE_LAT, fix.lat.toRawBits())
+            .putLong(KEY_PRECISE_LON, fix.lon.toRawBits())
+            .putLong(KEY_FIX_AT, fix.timeMs)
+            // Keep the rounded copy too, so a downgrade to an older version still finds a location.
+            .putFloat(KEY_LAT, LocationPick.round2(fix.lat).toFloat())
+            .putFloat(KEY_LON, LocationPick.round2(fix.lon).toFloat())
+        if (fix.accuracyM != null) edit.putFloat(KEY_ACCURACY, fix.accuracyM) else edit.remove(KEY_ACCURACY)
+        edit.apply()
+    }
+
+    /** Takes the best recent fix the phone already has, if it beats the saved one. */
+    fun updateFromLastKnown() {
+        val saved = savedFix()
+        val best = LocationPick.best(lastKnownFixes() + listOfNotNull(saved), System.currentTimeMillis())
+        if (best != null && best != saved) saveFix(best)
     }
 
     /** Updates the cached temperature and weather. Returns true on success. */
     fun refresh(): Boolean {
-        lastKnownLocation()?.let(::saveLocation)
-        if (!hasLocation()) return false
-        val lat = prefs.getFloat(KEY_LAT, 0f)
-        val lon = prefs.getFloat(KEY_LON, 0f)
+        updateFromLastKnown()
+        val (lat, lon) = sharedLocation() ?: return false
         val unit = if (fahrenheit) "fahrenheit" else "celsius"
         val url = URL(
             String.format(
@@ -100,23 +137,21 @@ class WeatherRepository(context: Context) {
         }
     }
 
-    /** The phone's last known approximate position, if permission allows. */
-    private fun lastKnownLocation(): Location? {
+    /** The fixes the phone already has from each provider (no new fix is requested), if permission allows. */
+    private fun lastKnownFixes(): List<Fix> {
         if (appContext.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            return null
+            return emptyList()
         }
-        val lm = appContext.getSystemService(LocationManager::class.java) ?: return null
+        val lm = appContext.getSystemService(LocationManager::class.java) ?: return emptyList()
         return try {
-            listOf(LocationManager.FUSED_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
+            listOf(LocationManager.FUSED_PROVIDER, LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
                 .mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
-                .maxByOrNull { it.time }
+                .map { Fix(it.latitude, it.longitude, if (it.hasAccuracy()) it.accuracy else null, it.time) }
         } catch (e: SecurityException) {
             // Android may refuse location to a background process; the saved location is used instead.
-            null
+            emptyList()
         }
     }
-
-    private fun round2(v: Double) = Math.round(v * 100) / 100.0
 
     companion object {
         private const val TAG = "GlyphWeather"
@@ -131,6 +166,10 @@ class WeatherRepository(context: Context) {
         private const val KEY_FETCHED_AT = "fetched_at"
         private const val KEY_LAT = "lat"
         private const val KEY_LON = "lon"
+        private const val KEY_PRECISE_LAT = "precise_lat"
+        private const val KEY_PRECISE_LON = "precise_lon"
+        private const val KEY_ACCURACY = "accuracy_m"
+        private const val KEY_FIX_AT = "fix_at"
         private const val KEY_FAHRENHEIT = "fahrenheit"
     }
 }

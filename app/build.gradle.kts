@@ -54,4 +54,6 @@ dependencies {
     implementation(files("libs/glyph-matrix-sdk-2.0.aar"))
 
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for flight parsing tests; Android's copy is only a stub on the JVM.
+    testImplementation("org.json:json:20240303")
 }

@@ -72,7 +72,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.3.${{ github.run_number }}
-          name: Glyph Weather 0.3.${{ github.run_number }}
+          name: Glyph Sky 0.3.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           files: glyph-weather.apk
           body: |

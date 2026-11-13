@@ -47,6 +47,10 @@ class WeatherRepository(context: Context) {
 
     fun hasLocation(): Boolean = prefs.contains(KEY_LAT)
 
+    /** The saved (rounded) latitude and longitude, or null before the first fix. */
+    fun savedLocation(): Pair<Double, Double>? =
+        if (hasLocation()) prefs.getFloat(KEY_LAT, 0f).toDouble() to prefs.getFloat(KEY_LON, 0f).toDouble() else null
+
     /** Remembers [location], rounded to ~1 km, for when a fresh fix isn't available. */
     fun saveLocation(location: Location) {
         prefs.edit()

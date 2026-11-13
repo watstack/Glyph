@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.os.Bundle
+import android.text.format.DateUtils
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
@@ -15,16 +16,22 @@ import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
 
-/** One-screen setup: a preview of the icon, location permission, °C/°F, and a shortcut to Nothing's Glyph Toys manager. */
+/**
+ * One-screen setup: a preview of the icon, location permission, °C/°F, planes on/off with the last plane seen,
+ * and a shortcut to Nothing's Glyph Toys manager.
+ */
 class MainActivity : Activity() {
     private val io = Executors.newSingleThreadExecutor()
     private lateinit var repo: WeatherRepository
+    private lateinit var flights: FlightRepository
     private lateinit var status: TextView
+    private lateinit var lastPlane: TextView
     private lateinit var preview: MatrixPreviewView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repo = WeatherRepository(this)
+        flights = FlightRepository(this)
 
         val pad = (24 * resources.displayMetrics.density).toInt()
         preview = MatrixPreviewView(this)
@@ -40,6 +47,16 @@ class MainActivity : Activity() {
                 refresh()
             }
         }
+        val planes = Switch(this).apply {
+            text = getString(R.string.show_planes)
+            isChecked = flights.enabled
+            setOnCheckedChangeListener { _, checked -> flights.enabled = checked }
+        }
+        lastPlane = TextView(this).apply {
+            textSize = 14f
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, pad / 3, 0, pad / 3)
+        }
         val activate = Button(this).apply {
             text = getString(R.string.activate_toy)
             setOnClickListener { openToysManager() }
@@ -50,7 +67,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(pad, pad * 2, pad, pad)
-            listOf(preview, status, unit, activate, help).forEach { addView(it) }
+            listOf(preview, status, unit, planes, lastPlane, activate, help).forEach { addView(it) }
         })
     }
 
@@ -62,6 +79,7 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
         }
         showTemperature()
+        showLastPlane()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -120,6 +138,15 @@ class MainActivity : Activity() {
         }
         val uv = repo.cachedUv()
         status.text = if (uv == null) weather else "$weather · UV ${Math.round(uv)}"
+    }
+
+    private fun showLastPlane() {
+        val (text, at) = flights.lastSeen() ?: run {
+            lastPlane.text = getString(R.string.no_planes_yet)
+            return
+        }
+        val ago = DateUtils.getRelativeTimeSpanString(at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+        lastPlane.text = getString(R.string.last_plane, text, ago)
     }
 
     private fun openToysManager() {

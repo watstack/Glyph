@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.text.format.DateUtils
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -120,17 +121,31 @@ class MainActivity : Activity() {
             setPadding(0, pad / 3, 0, pad)
         }
 
+        val title = TextView(this).apply {
+            text = getString(R.string.app_name)
+            textSize = 26f
+            setPadding(0, 0, 0, pad / 2)
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(pad, pad * 2, pad, pad)
+            setPadding(pad, pad, pad, pad)
+            addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             listOf(
                 preview, status, unit, planes, lastPlane,
                 simTitle, weatherPicker, findPlane, showOnGlyph, simStatus,
                 activate, help,
             ).forEach { addView(it) }
         }
-        setContentView(ScrollView(this).apply { addView(content) })
+        // Android 15 draws apps edge to edge: keep the content clear of the status bar, camera cutout and nav bar.
+        setContentView(ScrollView(this).apply {
+            addView(content)
+            setOnApplyWindowInsetsListener { _, insets ->
+                val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                content.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
+                insets
+            }
+        })
     }
 
     override fun onPause() {

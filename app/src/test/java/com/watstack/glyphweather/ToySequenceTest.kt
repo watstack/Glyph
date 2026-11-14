@@ -11,7 +11,7 @@ import org.junit.Test
 class ToySequenceTest {
     private val size = 13
     private var live = WeatherState(18.0, Condition.RAIN, 2.0)
-    private val plane = Flight("7c6b2d", "QFA401", "VH-VZA", "B738", 35_000, 47.0, 2.4, "QF401", "MEL", "SYD")
+    private val plane = Flight("7c6b2d", "QFA401", "VH-VZA", "B738", 35_000, 47.0, 2.4, "QF401", "MEL", "SYD", "Qantas", 830)
 
     /** Advances through to the next change of phase, returning the phases seen with how many steps and ms each took. */
     private fun run(seq: ToySequence, maxSteps: Int = 1000): List<Triple<Phase, Int, Long>> {
@@ -35,15 +35,32 @@ class ToySequenceTest {
     fun planeRunsCrossingThenScrollThenAltitudeThenTemperature() {
         val seq = ToySequence({ live })
         seq.startPlane(plane, size)
-        val phases = run(seq, 200).take(4)
-        val scrollSteps = DigitFont.scrollSteps(plane.ticker(), size)
+        val phases = run(seq, 1000).take(4)
+        val scrollSteps = DigitFont.scrollSteps(plane.ticker(), size) * 4 // the info scrolls past 4 times
         assertEquals(Triple(Phase.CROSSING, 32, 3_200L), phases[0])
         assertEquals(Triple(Phase.SCROLL, scrollSteps, scrollSteps * 80L), phases[1])
         assertEquals(Triple(Phase.ALTITUDE, 1, 3_000L), phases[2])
         assertEquals(Phase.TEMPERATURE, phases[3].first)
         assertFalse(seq.isPlane)
         val total = phases.take(3).sumOf { it.third }
-        assertTrue("whole plane sequence ($total ms) fits the wake lock", total < ToySequence.PLANE_MAX_MS)
+        val seq2 = ToySequence({ live }).apply { startPlane(plane, size) }
+        assertEquals("planeDurationMs matches the steps", total, seq2.planeDurationMs())
+        assertTrue("about a minute, not more ($total ms)", total in 30_000L..75_000L)
+    }
+
+    @Test
+    fun eachPassStartsBlankWithTheTextComingInFromTheRight() {
+        val seq = ToySequence({ live })
+        seq.startPlane(plane, size)
+        repeat(32) { seq.advance() }
+        val onePass = DigitFont.scrollSteps(plane.ticker(), size)
+        for (pass in 0 until 4) {
+            assertEquals(Phase.SCROLL, seq.phase)
+            assertTrue("pass $pass starts blank", seq.pixels(size).none { it > 0 })
+            val passFrames = (0 until onePass).map { seq.pixels(size).also { seq.advance() } }
+            assertTrue("pass $pass shows text", passFrames.any { px -> px.any { it > 0 } })
+        }
+        assertEquals(Phase.ALTITUDE, seq.phase)
     }
 
     @Test

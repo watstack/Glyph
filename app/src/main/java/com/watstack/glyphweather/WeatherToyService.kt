@@ -230,9 +230,9 @@ class WeatherToyService : Service() {
     private fun startPlane(f: Flight) {
         Log.i(TAG, "Plane: ${f.ticker()} at ${f.altitudeFt} ft, ${"%.1f".format(f.distanceKm)} km")
         main.removeCallbacks(step)
-        // Keep the CPU awake until the sequence ends, or the timer freezes once the phone sleeps.
-        wakeLock?.acquire(ToySequence.PLANE_MAX_MS)
         seq.startPlane(f, matrixSize())
+        // Keep the CPU awake until the sequence ends, or the timer freezes once the phone sleeps.
+        wakeLock?.acquire(seq.planeDurationMs() + WAKE_MARGIN_MS)
         show()
     }
 
@@ -307,6 +307,8 @@ class WeatherToyService : Service() {
     companion object {
         private const val TAG = "GlyphSky"
         private const val STALL_GRACE_MS = 5_000L
+        /** Slack on top of a plane sequence's length before the wake lock lets go by itself. */
+        private const val WAKE_MARGIN_MS = 10_000L
         private const val FLIP_REFRESH_MS = 10 * 60 * 1000L
         private const val FACE_DOWN_Z = -8f
         private const val FACE_UP_Z = -3f

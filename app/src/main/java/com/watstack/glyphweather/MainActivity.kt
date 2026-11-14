@@ -210,7 +210,7 @@ class MainActivity : Activity() {
                 findPlane.isEnabled = true
                 val f = lookup.flight
                 simStatus.text = when {
-                    f != null -> getString(R.string.found_plane, flights.describe(f))
+                    f != null -> getString(R.string.found_plane, flights.describe(f), flights.distance(f))
                     !lookup.hasLocation -> getString(R.string.need_location)
                     !lookup.reached -> getString(R.string.flight_feed_unreachable)
                     else -> getString(R.string.no_planes_near, SIMULATE_RADIUS_KM.toInt())
@@ -354,12 +354,13 @@ class MainActivity : Activity() {
     }
 
     private fun showLastPlane() {
-        val (text, at) = flights.lastSeen() ?: run {
+        val (text, distance, at) = flights.lastSeen() ?: run {
             lastPlane.text = getString(R.string.no_planes_yet)
             return
         }
         val ago = DateUtils.getRelativeTimeSpanString(at, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
-        lastPlane.text = getString(R.string.last_plane, text, ago)
+        val context = listOf(distance, ago.toString()).filter { it.isNotEmpty() }.joinToString(" · ")
+        lastPlane.text = getString(R.string.last_plane, text, context)
     }
 
     private fun openToysManager() {

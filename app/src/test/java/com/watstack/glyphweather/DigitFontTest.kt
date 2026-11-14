@@ -88,7 +88,7 @@ class DigitFontTest {
 
     @Test
     fun everyTickerCharacterDraws() {
-        for (ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789->") {
+        for (ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789->/") {
             assertTrue("$ch draws", DigitFont.renderScroll("$ch", size - 2, size).any { it })
         }
         assertTrue("lowercase is upper-cased", DigitFont.renderScroll("qf", 6, size).contentEquals(DigitFont.renderScroll("QF", 6, size)))

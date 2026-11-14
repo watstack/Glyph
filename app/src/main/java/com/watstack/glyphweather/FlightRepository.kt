@@ -15,7 +15,7 @@ class FlightRepository(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("flights", Context.MODE_PRIVATE)
     private val weather = WeatherRepository(context)
     /** Route per callsign, null when adsbdb doesn't know it. Kept for the life of the process. */
-    private val routes = HashMap<String, Triple<String?, String?, String?>?>()
+    private val routes = HashMap<String, Route?>()
 
     var enabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, true)
@@ -45,14 +45,17 @@ class FlightRepository(context: Context) {
         return Lookup(flight?.let(::withRoute), reached = true)
     }
 
-    /** One line for the app: "QF401 MEL>SYD B738 · 35K ft · 2.4 km". */
-    fun describe(f: Flight): String =
-        String.format(Locale.US, "%s · %s ft · %.1f km", f.ticker(), DigitFont.altitudeLabel(f.altitudeFt), f.distanceKm)
+    /** The same segments the matrix shows, then the altitude: "QF401 - MEL>SYD - B738 - Qantas - 830 km/h - 35K". */
+    fun describe(f: Flight): String = (f.segments() + DigitFont.altitudeLabel(f.altitudeFt)).joinToString(" - ")
 
-    /** The last plane shown, for the app screen: e.g. "QF401 MEL>SYD B738 · 35K ft · 2.4 km", and when. */
-    fun lastSeen(): Pair<String, Long>? {
+    /** Context the matrix doesn't show: "2.3 km away". */
+    fun distance(f: Flight): String = String.format(Locale.US, "%.1f km away", f.distanceKm)
+
+    /** The last plane shown, for the app screen: its [describe] line, its [distance], and when it was seen. */
+    fun lastSeen(): Triple<String, String, Long>? {
         val text = prefs.getString(KEY_LAST, null) ?: return null
-        return text to prefs.getLong(KEY_LAST_AT, 0L)
+        // Older versions stored one combined line; show it as it is.
+        return Triple(text, prefs.getString(KEY_LAST_DISTANCE, null) ?: "", prefs.getLong(KEY_LAST_AT, 0L))
     }
 
     private fun withRoute(f: Flight): Flight {
@@ -62,11 +65,15 @@ class FlightRepository(context: Context) {
                 runCatching { Flights.route(it) }.getOrNull()
             }
         } ?: return f
-        return f.copy(flightNumber = route.first, from = route.second, to = route.third)
+        return f.copy(flightNumber = route.flightNumber, from = route.from, to = route.to, airline = route.airline)
     }
 
     private fun remember(f: Flight) {
-        prefs.edit().putString(KEY_LAST, describe(f)).putLong(KEY_LAST_AT, System.currentTimeMillis()).apply()
+        prefs.edit()
+            .putString(KEY_LAST, describe(f))
+            .putString(KEY_LAST_DISTANCE, distance(f))
+            .putLong(KEY_LAST_AT, System.currentTimeMillis())
+            .apply()
     }
 
     private fun get(url: String): String? = try {
@@ -95,5 +102,6 @@ class FlightRepository(context: Context) {
         private const val KEY_ENABLED = "enabled"
         private const val KEY_LAST = "last"
         private const val KEY_LAST_AT = "last_at"
+        private const val KEY_LAST_DISTANCE = "last_distance"
     }
 }

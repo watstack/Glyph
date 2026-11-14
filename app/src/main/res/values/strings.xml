@@ -4,7 +4,7 @@
     <string name="toy_summary">Temperature and weather for your location, and the planes flying over</string>
     <string name="use_fahrenheit">Show °F</string>
     <string name="activate_toy">Activate Glyph Toy</string>
-    <string name="setup_help">1. Tap Activate Glyph Toy and add \"Weather &amp; Flights\".\n2. Go to Settings › Glyph Interface › Flip to Glyph › Always-on Glyph Toy and choose Weather &amp; Flights.\n3. Put the phone face down.\n\nThe matrix shows the temperature for 30 seconds, then an animated weather icon for 3 seconds. The weather refreshes every 30 minutes. Opening this app also updates your location.\n\nWhen a plane flies within 5 km, it crosses the matrix in the direction it\'s heading, then its flight, route and aircraft type scroll past, then its altitude (35K = 35,000 ft).</string>
+    <string name="setup_help">1. Tap Activate Glyph Toy and add \"Weather &amp; Flights\".\n2. Go to Settings › Glyph Interface › Flip to Glyph › Always-on Glyph Toy and choose Weather &amp; Flights.\n3. Put the phone face down.\n\nThe matrix shows the temperature for 30 seconds, then an animated weather icon for 3 seconds. The weather refreshes every 30 minutes. Opening this app also updates your location.\n\nWhen a plane flies within 5 km, it crosses the matrix in the direction it\'s heading, then its flight, route, aircraft type, airline and speed scroll past 4 times, then its altitude (35K = 35,000 ft).</string>
     <string name="loading">Fetching weather…</string>
     <string name="need_location">Location permission is needed to know where you are.</string>
     <string name="no_weather">Couldn\'t get the weather yet. Check your connection and location.</string>
@@ -12,7 +12,7 @@
     <string name="current_weather">Now: %1$s°%2$s · %3$s</string>
     <string name="show_planes">Show planes overhead</string>
     <string name="no_planes_yet">No planes seen overhead yet.</string>
-    <string name="last_plane">Last plane: %1$s (%2$s)</string>
+    <string name="last_plane">Last plane: %1$s\n%2$s</string>
     <string name="simulate">Simulate</string>
     <string name="live_weather">Live weather</string>
     <string name="by_day">%1$s (day)</string>
@@ -20,7 +20,7 @@
     <string name="simulating_weather">Showing %1$s in the preview.</string>
     <string name="find_plane">Find nearest plane</string>
     <string name="finding_plane">Looking for planes within 50 km…</string>
-    <string name="found_plane">Nearest plane: %1$s</string>
+    <string name="found_plane">Nearest plane: %1$s\n%2$s</string>
     <string name="no_planes_near">No planes in the air within %1$d km right now.</string>
     <string name="flight_feed_unreachable">Couldn\'t reach the flight feed. Check your connection.</string>
     <string name="show_on_glyph">Show on Glyph</string>

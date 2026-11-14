@@ -12,7 +12,7 @@ class FlightsTest {
 
     private val feed = """
         {"ac": [
-          {"hex": "7c6b2d", "flight": "QFA401  ", "r": "VH-VZA", "t": "B738", "alt_baro": 12025, "track": 47.3,
+          {"hex": "7c6b2d", "flight": "QFA401  ", "r": "VH-VZA", "t": "B738", "alt_baro": 12025, "track": 47.3, "gs": 450.2,
            "lat": -37.75, "lon": 144.97},
           {"hex": "7c1234", "flight": "JST510  ", "t": "A320", "alt_baro": 3000, "track": 180.0,
            "lat": -37.80, "lon": 144.96},
@@ -32,6 +32,7 @@ class FlightsTest {
         assertEquals("B738", f.type)
         assertEquals(12025, f.altitudeFt)
         assertEquals(47.3, f.trackDeg!!, 0.001)
+        assertEquals(830, f.speedKmh) // 450.2 kt = 833.8 km/h, to the nearest 10
         assertTrue(f.distanceKm < 3)
     }
 
@@ -53,6 +54,7 @@ class FlightsTest {
         assertNull(f.type)
         assertNull(f.altitudeFt)
         assertNull(f.trackDeg)
+        assertNull(f.speedKmh)
         assertEquals("PLANE", f.ticker())
     }
 
@@ -64,16 +66,19 @@ class FlightsTest {
               "origin": {"iata_code": "MEL", "icao_code": "YMML", "name": "Melbourne Airport"},
               "destination": {"iata_code": "SYD", "icao_code": "YSSY", "name": "Sydney Airport"}}}}
         """.trimIndent()
-        assertEquals(Triple("QF401", "MEL", "SYD"), Flights.route(body))
+        assertEquals(Route("QF401", "MEL", "SYD", "Qantas"), Flights.route(body))
         assertNull(Flights.route("""{"response": "unknown callsign"}"""))
     }
 
     @Test
     fun tickerLeavesOutWhatIsUnknown() {
         val base = Flight("a", "QFA401", "VH-VZA", "B738", 35000, 0.0, 1.0)
-        assertEquals("QFA401 B738", base.ticker())
-        assertEquals("QF401 MEL>SYD B738", base.copy(flightNumber = "QF401", from = "MEL", to = "SYD").ticker())
+        assertEquals("QFA401  -  B738", base.ticker())
+        val full = base.copy(flightNumber = "QF401", from = "MEL", to = "SYD", airline = "Qantas", speedKmh = 830)
+        assertEquals(listOf("QF401", "MEL>SYD", "B738", "Qantas", "830 km/h"), full.segments())
+        assertEquals("QF401  -  MEL>SYD  -  B738  -  Qantas  -  830 km/h", full.ticker())
         assertEquals("VH-VZA", base.copy(callsign = null, type = null).ticker())
+        assertEquals("route needs both ends", listOf("QF401", "B738"), base.copy(flightNumber = "QF401", from = "MEL").segments())
     }
 
     @Test

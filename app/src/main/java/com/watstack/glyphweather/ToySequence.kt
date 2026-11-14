@@ -9,7 +9,7 @@ data class WeatherState(val temperature: Double?, val condition: WeatherIcons.Co
  * owns the timer: draw [pixels], wait [delayMs], call [advance], repeat.
  *
  * Weather cycle: temperature for [temperatureMs] → animated icon (12 frames) → UV (after a sun, if known) → temperature.
- * A plane interrupts it: crossing (twice) → flight info scrolling → altitude → back to the temperature.
+ * A plane interrupts it: crossing (twice) → flight info scrolling [SCROLL_PASSES] times → altitude → back to the temperature.
  */
 class ToySequence(private val live: () -> WeatherState, private val temperatureMs: Long = TEMPERATURE_MS) {
     enum class Phase { TEMPERATURE, ICON, UV, CROSSING, SCROLL, ALTITUDE }
@@ -51,8 +51,12 @@ class ToySequence(private val live: () -> WeatherState, private val temperatureM
     fun startPlane(f: Flight, size: Int) {
         flight = f
         planeStep = 0
-        scrollSteps = DigitFont.scrollSteps(f.ticker(), size)
+        scrollSteps = DigitFont.scrollSteps(f.ticker(), size) * SCROLL_PASSES
     }
+
+    /** How long the current plane's whole sequence takes, in ms (0 when there's no plane). */
+    fun planeDurationMs(): Long = if (flight == null) 0 else
+        crossingSteps * FlightIcons.FRAME_MS + scrollSteps * SCROLL_MS + ALTITUDE_MS
 
     /**
      * Shows [state] instead of the live weather, from its icon: icon → UV (after a sun) → temperature.
@@ -107,7 +111,11 @@ class ToySequence(private val live: () -> WeatherState, private val temperatureM
         val w = weather
         return when (phase) {
             Phase.CROSSING -> FlightIcons.frame(f!!.trackDeg, planeStep % FlightIcons.FRAMES, size)
-            Phase.SCROLL -> lit(DigitFont.renderScroll(f!!.ticker(), planeStep - crossingSteps, size))
+            Phase.SCROLL -> {
+                // Each pass starts again with the text entering from the right.
+                val onePass = scrollSteps / SCROLL_PASSES
+                lit(DigitFont.renderScroll(f!!.ticker(), (planeStep - crossingSteps) % onePass, size))
+            }
             Phase.ALTITUDE -> lit(DigitFont.renderAltitude(f!!.altitudeFt, size))
             Phase.UV -> lit(DigitFont.renderUv(w.uv, size))
             Phase.ICON -> w.condition?.let { WeatherIcons.frame(it, frame, size) }
@@ -122,8 +130,8 @@ class ToySequence(private val live: () -> WeatherState, private val temperatureM
         const val TEMPERATURE_MS = 30_000L
         const val SCROLL_MS = 80L
         const val ALTITUDE_MS = 3_000L
-        /** Longest a whole plane sequence can take; keeps the CPU awake for at most this long. */
-        const val PLANE_MAX_MS = 30_000L
+        /** How many times the flight info scrolls past for each plane. */
+        const val SCROLL_PASSES = 4
         private const val TEMPERATURE = -1
         private const val UV = WeatherIcons.FRAMES
     }

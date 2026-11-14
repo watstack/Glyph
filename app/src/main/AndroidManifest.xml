@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Precise location, so plane distances are right; only a ~1 km rounded point is ever sent online. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- Keeps the CPU awake for the ~15 s a plane takes to show, so the phone can't sleep mid-sequence. -->
+    <!-- Keeps the CPU awake for the ~30-60 s a plane takes to show, so the phone can't sleep mid-sequence. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application

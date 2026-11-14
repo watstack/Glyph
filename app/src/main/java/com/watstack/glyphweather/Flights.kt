@@ -24,14 +24,34 @@ data class Flight(
     /** Origin and destination IATA codes, e.g. "MEL" and "SYD". */
     val from: String? = null,
     val to: String? = null,
+    /** Airline name, e.g. "Qantas" (from the route lookup). */
+    val airline: String? = null,
+    /** Ground speed in km/h, rounded to the nearest 10. */
+    val speedKmh: Int? = null,
 ) {
-    /** The scrolling line: "QF401 MEL>SYD B738", leaving out whatever we don't know. */
-    fun ticker(): String = listOfNotNull(
+    /**
+     * The plane's info, in the order both the matrix and the app show it:
+     * flight, route, aircraft type, airline, ground speed. Whatever we don't know is left out.
+     */
+    fun segments(): List<String> = listOfNotNull(
         flightNumber ?: callsign ?: registration ?: "PLANE",
         if (from != null && to != null) "$from>$to" else null,
         type,
-    ).joinToString(" ")
+        airline,
+        speedKmh?.let { "$it km/h" },
+    )
+
+    /** The scrolling line on the matrix: "QF401  -  MEL>SYD  -  B738  -  Qantas  -  830 km/h". */
+    fun ticker(): String = segments().joinToString(GAP)
+
+    companion object {
+        /** A wide gap with a dash between segments on the matrix. */
+        const val GAP = "  -  "
+    }
 }
+
+/** A route from adsbdb.com. */
+data class Route(val flightNumber: String?, val from: String?, val to: String?, val airline: String?)
 
 /**
  * Parsing and geometry for flights. Pure Kotlin plus org.json (no Android types) so it can be unit-tested on the JVM.
@@ -39,6 +59,7 @@ data class Flight(
 object Flights {
     /** Planes closer than this are "overhead" and interrupt the weather. */
     const val RADIUS_KM = 5.0
+    private const val KM_PER_KNOT = 1.852
 
     /**
      * The nearest airborne plane within [radiusKm] of ([lat], [lon]) in an adsb.lol / airplanes.live v2 response
@@ -59,6 +80,8 @@ object Flights {
             }
             val d = distanceKm(lat, lon, a.getDouble("lat"), a.getDouble("lon"))
             if (d > radiusKm || (best != null && d >= best.distanceKm)) continue
+            // gs is ground speed in knots.
+            val speed = (a.opt("gs") as? Number)?.toDouble()?.let { Math.round(it * KM_PER_KNOT / 10.0).toInt() * 10 }
             val track = listOf("track", "true_heading", "mag_heading")
                 .firstNotNullOfOrNull { k -> (a.opt(k) as? Number)?.toDouble() }
             best = Flight(
@@ -69,16 +92,18 @@ object Flights {
                 altitudeFt = alt,
                 trackDeg = track,
                 distanceKm = d,
+                speedKmh = speed,
             )
         }
         return best
     }
 
-    /** A route from an adsbdb.com `/v0/callsign/{callsign}` response: (flight number, origin IATA, destination IATA). */
-    fun route(body: String): Triple<String?, String?, String?>? {
+    /** A route from an adsbdb.com `/v0/callsign/{callsign}` response, or null if it doesn't know the callsign. */
+    fun route(body: String): Route? {
         val route = JSONObject(body).optJSONObject("response")?.optJSONObject("flightroute") ?: return null
         fun iata(key: String) = route.optJSONObject(key)?.let { text(it, "iata_code") ?: text(it, "icao_code") }
-        return Triple(text(route, "callsign_iata"), iata("origin"), iata("destination"))
+        val airline = route.optJSONObject("airline")?.let { text(it, "name") }
+        return Route(text(route, "callsign_iata"), iata("origin"), iata("destination"), airline)
     }
 
     /** Great-circle distance in km. */

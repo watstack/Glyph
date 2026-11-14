@@ -17,7 +17,14 @@ Flipping the phone face down starts the cycle at the icon straight away, and fet
 While the phone is face down, it checks for planes every 15 seconds. When one is within **5 km**, it interrupts the weather:
 
 1. The plane flies across the matrix in the direction it's really heading (snapped to the nearest of 8 compass points), with a contrail, twice.
-2. Its flight number, route and aircraft type scroll past, e.g. `QF401 MEL>SYD B738`. Anything unknown is left out; with no route it shows the callsign (`QFA401`).
+2. Its details scroll past 4 times, with a wide `-` gap between each: `QF401  -  MEL>SYD  -  B738  -  QANTAS  -  830 KM/H`. The segments, in order:
+   - **Flight:** flight number (`QF401`); without a route lookup, the callsign (`QFA401`), else the registration, else `PLANE`.
+   - **Route:** origin `>` destination airport codes, only when both are known.
+   - **Aircraft type:** as broadcast (`B738`, `C56X`).
+   - **Airline:** from the route lookup (`QANTAS`).
+   - **Ground speed:** in km/h, to the nearest 10.
+
+   Anything unknown is left out. The app's "Nearest plane" and "Last plane" show the same segments and altitude (`QF401 - MEL>SYD - B738 - Qantas - 830 km/h - 35K`), with the distance and when it was seen underneath.
 3. Its altitude shows for 3 seconds: `35K` is 35,000 ft; below 1,000 ft it's in hundreds (`800`).
 
 Then the weather cycle starts again from the temperature. Each plane is shown once per pass (not again for 10 minutes).

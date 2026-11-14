@@ -42,7 +42,7 @@ object DigitFont {
             '9' to listOf("###", "#.#", "###", "..#", "###"),
             '-' to listOf("...", "...", "###", "...", "..."),
             '°' to listOf("##", "##", "..", "..", ".."),
-            // Letters and symbols for the scrolling flight ticker ("QF401 MEL>SYD B738").
+            // Letters and symbols for the scrolling flight ticker ("QF401  -  MEL>SYD  -  B738  -  830 KM/H").
             'A' to listOf(".#.", "#.#", "###", "#.#", "#.#"),
             'B' to listOf("##.", "#.#", "##.", "#.#", "##."),
             'C' to listOf(".##", "#..", "#..", "#..", ".##"),
@@ -70,6 +70,7 @@ object DigitFont {
             'Y' to listOf("#.#", "#.#", ".#.", ".#.", ".#."),
             'Z' to listOf("###", "..#", ".#.", "#..", "###"),
             '>' to listOf("#..", ".#.", "..#", ".#.", "#.."),
+            '/' to listOf("..#", "..#", ".#.", "#..", "#.."),
             ' ' to listOf("..", "..", "..", "..", ".."),
         )
     )
